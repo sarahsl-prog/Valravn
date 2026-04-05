@@ -33,7 +33,7 @@ class ToolInvocationRecord(BaseModel):
 
     @property
     def success(self) -> bool:
-        return self.exit_code == 0 and self.had_output
+        return self.exit_code == 0
 
 
 class Anomaly(BaseModel):

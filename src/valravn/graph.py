@@ -61,6 +61,11 @@ def _build_graph(checkpointer: SqliteSaver) -> object:
             return "record_anomaly"
         return "update_plan"
 
+    def route_after_planning(state: AgentState) -> str:
+        if state.get("current_step_id") is None:
+            return "write_findings_report"
+        return "load_skill"
+
     def route_next_step(state: AgentState) -> str:
         if state["plan"].next_pending_step() is not None:
             return "load_skill"
@@ -77,7 +82,7 @@ def _build_graph(checkpointer: SqliteSaver) -> object:
     builder.add_node("write_findings_report", write_findings_report)
 
     builder.add_edge(START, "plan_investigation")
-    builder.add_edge("plan_investigation", "load_skill")
+    builder.add_conditional_edges("plan_investigation", route_after_planning)
     builder.add_edge("load_skill", "run_forensic_tool")
     builder.add_edge("run_forensic_tool", "check_anomalies")
     builder.add_conditional_edges("check_anomalies", route_after_anomaly_check)
