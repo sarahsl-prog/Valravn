@@ -8,7 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
 from valravn.models.records import Anomaly, AnomalyResponseAction
-from valravn.models.task import PlannedStep
+from valravn.models.task import PlannedStep, StepStatus
 
 _SYSTEM_PROMPT = """\
 You are an expert DFIR analyst reviewing forensic tool output on a SANS SIFT workstation.
@@ -44,8 +44,10 @@ def check_anomalies(state: dict) -> dict:
 
     invocation = invocations[-1]
 
+    MAX_TOOL_OUTPUT_BYTES = 50_000
     stdout_path = Path(invocation.stdout_path)
-    tool_output = stdout_path.read_text(errors="replace") if stdout_path.exists() else ""
+    raw = stdout_path.read_text(errors="replace") if stdout_path.exists() else ""
+    tool_output = raw[:MAX_TOOL_OUTPUT_BYTES]
 
     messages = [
         SystemMessage(content=_SYSTEM_PROMPT),
@@ -117,12 +119,21 @@ def record_anomaly(state: dict) -> dict:
         evidence_refs = state.get("task").evidence_refs if state.get("task") else []
         evidence_path = evidence_refs[0] if evidence_refs else "/evidence"
 
-        follow_up = PlannedStep(
-            skill_domain=skill_domain,
-            tool_cmd=["strings", "-n", "20", evidence_path],
-            rationale=f"Follow-up investigation of anomaly: {anomaly.description}",
-        )
-        follow_up_steps = [follow_up]
+        # Count existing anomaly follow-up steps to prevent runaway depth
+        follow_up_count = sum(
+            1 for s in plan.steps
+            if s.rationale.startswith("Follow-up investigation of anomaly")
+            and s.status == StepStatus.PENDING
+        ) if plan is not None else 0
+        if follow_up_count < 3:
+            follow_up = PlannedStep(
+                skill_domain=skill_domain,
+                tool_cmd=["strings", "-n", "20", evidence_path],
+                rationale=f"Follow-up investigation of anomaly: {anomaly.description}",
+            )
+            follow_up_steps = [follow_up]
+        else:
+            follow_up_steps = []
 
     return {
         "anomalies": updated_anomalies,
