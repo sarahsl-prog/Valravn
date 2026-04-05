@@ -1,0 +1,16 @@
+{
+  "id": "578e86b6-d533-474c-9bbd-590dda2758de",
+  "step_id": "de3e172e-198b-4f50-91c1-cfce06a6e516",
+  "attempt_number": 1,
+  "cmd": [
+    "strings",
+    "/home/sansforensics/Code/Valravn/tests/fixtures/evidence/memory.lime.stub"
+  ],
+  "exit_code": 0,
+  "stdout_path": "analysis/578e86b6-d533-474c-9bbd-590dda2758de.stdout",
+  "stderr_path": "analysis/578e86b6-d533-474c-9bbd-590dda2758de.stderr",
+  "started_at_utc": "2026-04-05T21:31:58.041196Z",
+  "completed_at_utc": "2026-04-05T21:31:58.042969Z",
+  "duration_seconds": 0.0017705780046526343,
+  "had_output": true
+}

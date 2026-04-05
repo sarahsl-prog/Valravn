@@ -1,11 +1,9 @@
-import os
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from valravn.models.task import InvestigationPlan, InvestigationTask, PlannedStep
-from valravn.nodes.skill_loader import SKILL_PATHS, SkillNotFoundError, load_skill
+from valravn.nodes.skill_loader import SkillNotFoundError, load_skill
 
 
 def _make_state(skill_domain: str, skill_content: str | None, read_only_evidence) -> dict:

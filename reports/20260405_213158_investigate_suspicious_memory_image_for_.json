@@ -1,0 +1,13 @@
+{
+  "task_id": "b43e7dae-27b2-4e5a-b311-f56ccb6e92b2",
+  "prompt": "Investigate suspicious memory image for malware indicators",
+  "evidence_refs": [
+    "/home/sansforensics/Code/Valravn/tests/fixtures/evidence/memory.lime.stub"
+  ],
+  "generated_at_utc": "2026-04-05T21:31:58.045155Z",
+  "conclusions": [],
+  "anomalies": [],
+  "tool_failures": [],
+  "self_corrections": [],
+  "investigation_plan_path": "analysis/investigation_plan.json"
+}

@@ -32,7 +32,8 @@ tool invocations to execute.
 Rules:
 - Use ONLY tools available on SIFT (Volatility 3, fls, icat, log2timeline.py, yara, etc.)
 - Each step must target ONE specific forensic question
-- skill_domain must be one of: memory-analysis, sleuthkit, windows-artifacts, plaso-timeline, yara-hunting
+- skill_domain must be one of: memory-analysis, sleuthkit, windows-artifacts,
+  plaso-timeline, yara-hunting
 - tool_cmd must be the exact subprocess argv (list of strings)
 - Do NOT include evidence paths as output destinations
 """
