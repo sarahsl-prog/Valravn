@@ -1,9 +1,6 @@
-import os
-from pathlib import Path
 
-import pytest
 
-from valravn.config import AppConfig, OutputConfig, RetryConfig, load_config
+from valravn.config import OutputConfig, RetryConfig, load_config
 
 
 def test_retry_config_defaults():
