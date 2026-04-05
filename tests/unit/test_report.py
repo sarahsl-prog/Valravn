@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pytest
 
@@ -78,3 +77,10 @@ def test_report_conclusion_cites_invocation(read_only_evidence, output_dir):
     state = _state_with_invocation(read_only_evidence, output_dir)
     result = write_findings_report(state)
     assert result["report"].conclusions[0].supporting_invocation_ids == ["inv-1"]
+
+
+def test_conclusion_without_citation_raises():
+    from valravn.models.report import Conclusion
+
+    with pytest.raises(ValueError, match="cite"):
+        Conclusion(statement="test", supporting_invocation_ids=[], confidence="high")
