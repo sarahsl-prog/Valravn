@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import timezone
 from pathlib import Path
 
 from valravn.models.report import (
@@ -133,7 +132,8 @@ def _render_markdown(report: FindingsReport) -> str:
         for c in corrections:
             lines.append(
                 f"- Step `{c.step_id}` attempt {c.attempt_number}: "
-                f"`{' '.join(c.original_cmd)}` → `{' '.join(c.corrected_cmd)}`"
+                f"`{' '.join(c.original_cmd)}` → `{' '.join(c.corrected_cmd)}`\n"
+                f"  Rationale: {c.correction_rationale}"
             )
         return "\n".join(lines)
 

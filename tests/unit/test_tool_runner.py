@@ -72,3 +72,19 @@ def test_record_json_persisted(read_only_evidence, output_dir):
     import json
     data = json.loads(record_file.read_text())
     assert data["id"] == inv_id
+    assert data["attempt_number"] == 1
+
+
+def test_run_tool_invalid_step_id_raises(read_only_evidence, output_dir):
+    task = InvestigationTask(prompt="test", evidence_refs=[str(read_only_evidence)])
+    step = PlannedStep(skill_domain="sleuthkit", tool_cmd=["echo", "x"], rationale="r")
+    plan = InvestigationPlan(task_id=task.id, steps=[step])
+    state = {
+        "task": task, "plan": plan, "invocations": [],
+        "anomalies": [], "report": None,
+        "current_step_id": "nonexistent-step-id", "skill_cache": {},
+        "messages": [], "_output_dir": str(output_dir),
+        "_retry_config": {"max_attempts": 3, "retry_delay_seconds": 0.0},
+    }
+    with pytest.raises(ValueError, match="not found in plan"):
+        run_forensic_tool(state)

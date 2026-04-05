@@ -13,7 +13,9 @@ def run_forensic_tool(state: dict) -> dict:
     """LangGraph node: invoke the current step's tool_cmd; capture stdout/stderr."""
     plan = state["plan"]
     step_id: str = state["current_step_id"]
-    step = next(s for s in plan.steps if s.id == step_id)
+    step = next((s for s in plan.steps if s.id == step_id), None)
+    if step is None:
+        raise ValueError(f"Step {step_id!r} not found in plan")
     output_dir = Path(state.get("_output_dir", "."))
 
     analysis_dir = output_dir / "analysis"
@@ -57,7 +59,7 @@ def run_forensic_tool(state: dict) -> dict:
     rec = ToolInvocationRecord(
         id=inv_id,
         step_id=step_id,
-        attempt_number=1,
+        attempt_number=len(step.invocation_ids) + 1,
         cmd=step.tool_cmd,
         exit_code=proc.returncode,
         stdout_path=stdout_path,

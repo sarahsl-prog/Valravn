@@ -1,7 +1,4 @@
-from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from valravn.models.task import InvestigationPlan, InvestigationTask, PlannedStep, StepStatus
 from valravn.nodes.plan import plan_investigation, update_plan
@@ -31,7 +28,10 @@ def test_plan_investigation_populates_steps(read_only_evidence, output_dir):
     mock_response.steps = [
         MagicMock(
             skill_domain="memory-analysis",
-            tool_cmd=["python3", "/opt/volatility3-2.20.0/vol.py", "-f", "/mnt/mem.lime", "windows.netstat"],
+            tool_cmd=[
+                "python3", "/opt/volatility3-2.20.0/vol.py",
+                "-f", "/mnt/mem.lime", "windows.netstat",
+            ],
             rationale="list network connections",
         )
     ]
@@ -113,6 +113,22 @@ def test_update_plan_marks_step_failed(read_only_evidence, output_dir):
     }
     result = update_plan(state)
     assert result["plan"].steps[0].status == StepStatus.FAILED
+
+
+def test_plan_investigation_empty_steps(read_only_evidence, output_dir):
+    mock_response = MagicMock()
+    mock_response.steps = []
+    state = _base_state(read_only_evidence, output_dir)
+
+    with patch("valravn.nodes.plan._get_llm") as mock_llm_fn:
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = mock_response
+        mock_llm_fn.return_value = mock_llm
+
+        result = plan_investigation(state)
+
+    assert result["current_step_id"] is None
+    assert len(result["plan"].steps) == 0
 
 
 def test_update_plan_current_step_id_none_when_no_steps_remain(read_only_evidence, output_dir):
