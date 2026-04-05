@@ -1,5 +1,0 @@
-VALRAVN_STUB_MEMORY_FIXTURE
-process_name: svchost.exe pid: 1234 ppid: 100
-network_connection: 192.168.1.1:445 -> 10.0.0.5:49152 state: ESTABLISHED
-registry_key: HKLM\Software\Microsoft\Windows\CurrentVersion\Run
-timestamp_utc: 2026-01-15T08:23:11Z
