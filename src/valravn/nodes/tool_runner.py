@@ -48,6 +48,7 @@ def _run_single_attempt(
     step,
     step_id: str,
     analysis_dir: Path,
+    timeout_seconds: int = 3600,
 ) -> tuple[ToolInvocationRecord, subprocess.CompletedProcess]:
     inv_id = str(uuid.uuid4())
     stdout_path = analysis_dir / f"{inv_id}.stdout"
@@ -56,11 +57,21 @@ def _run_single_attempt(
     started = datetime.now(timezone.utc)
     t0 = time.monotonic()
 
-    proc = subprocess.run(
-        step.tool_cmd,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        proc = subprocess.run(
+            step.tool_cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as e:
+        # Build a synthetic failed process result
+        proc = subprocess.CompletedProcess(
+            args=step.tool_cmd,
+            returncode=-1,
+            stdout=e.output.decode() if e.output else "",
+            stderr=f"Tool timed out after {timeout_seconds}s",
+        )
 
     duration = time.monotonic() - t0
     completed = datetime.now(timezone.utc)
@@ -118,6 +129,7 @@ def run_forensic_tool(state: dict) -> dict:
 
     retry_cfg = state.get("_retry_config") or {}
     max_attempts: int = retry_cfg.get("max_attempts", 3)
+    timeout_seconds: int = retry_cfg.get("timeout_seconds", 3600)
 
     invocations: list[ToolInvocationRecord] = list(state.get("invocations") or [])
     self_corrections: list[SelfCorrectionEvent] = list(state.get("_self_corrections") or [])
@@ -128,7 +140,7 @@ def run_forensic_tool(state: dict) -> dict:
     step_exhausted = False
 
     for attempt in range(1, max_attempts + 1):
-        rec, proc = _run_single_attempt(step, step_id, analysis_dir)
+        rec, proc = _run_single_attempt(step, step_id, analysis_dir, timeout_seconds)
         invocations.append(rec)
         step.invocation_ids.append(rec.id)
         last_inv_id = rec.id

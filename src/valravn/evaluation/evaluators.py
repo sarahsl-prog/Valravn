@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import stat
+import sys
 from pathlib import Path
 
 import mlflow
@@ -53,6 +54,10 @@ def _eval_evidence_integrity(report: FindingsReport) -> bool:
     for ref in report.evidence_refs:
         p = Path(ref)
         if not p.exists():
+            print(
+                f"[SC-005 WARNING] Evidence path not found at evaluation time: {p}",
+                file=sys.stderr,
+            )
             return False
         mode = p.stat().st_mode
         # Writable by owner, group, or other → integrity violation
