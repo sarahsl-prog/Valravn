@@ -1,0 +1,2 @@
+[console_scripts]
+valravn = valravn.cli:main
