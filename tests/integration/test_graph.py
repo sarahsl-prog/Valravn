@@ -6,12 +6,6 @@ Runs the full LangGraph pipeline with:
   - check_anomalies LLM mocked to return no anomaly detected
   - Real subprocess.run for the tool step (strings is available on SIFT/Ubuntu)
   - Real write_findings_report producing a Markdown report
-
-Note: LangGraph strips keys not present in AgentState TypedDict before passing
-state to nodes. The ``_output_dir`` key set in ``graph.run()`` is therefore
-unavailable inside nodes, which fall back to ``Path(".")`` (CWD).  The test
-changes CWD to ``tmp_path`` so that all output lands there, making assertions
-straightforward without modifying production code.
 """
 from __future__ import annotations
 
@@ -31,7 +25,7 @@ _STUB = Path(__file__).parent.parent / "fixtures" / "evidence" / "memory.lime.st
 
 
 @pytest.mark.integration
-def test_us1_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_us1_end_to_end(tmp_path: Path) -> None:
     """Full graph run on a synthetic evidence stub using 'strings'."""
     # Confirm fixture exists and is read-only before the run
     assert _STUB.exists(), f"Stub fixture missing: {_STUB}"
@@ -45,8 +39,7 @@ def test_us1_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     skill_file = tmp_path / "sleuthkit_skill.md"
     skill_file.write_text("# Sleuth Kit Skill\nUse fls, icat, strings.")
 
-    # Change CWD to tmp_path so that node fallback Path(".") writes here
-    monkeypatch.chdir(tmp_path)
+    output_dir = tmp_path / "output"
 
     # Build task/config objects
     task = InvestigationTask(
@@ -54,7 +47,7 @@ def test_us1_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
         evidence_refs=[str(evidence_path)],
     )
     app_cfg = AppConfig(retry=RetryConfig(max_attempts=1, retry_delay_seconds=0.0))
-    out_cfg = OutputConfig(output_dir=tmp_path / "output")
+    out_cfg = OutputConfig(output_dir=output_dir)
     out_cfg.ensure_dirs()
 
     # Mock the planning LLM to return one planned step: strings on the stub
@@ -88,9 +81,8 @@ def test_us1_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     # Exit code must be 0 or 1 — never an exception
     assert exit_code in (0, 1), f"Unexpected exit code: {exit_code}"
 
-    # Nodes fall back to CWD (tmp_path) when _output_dir is unavailable in AgentState.
-    # Assert that a Markdown report exists under reports/ relative to CWD.
-    reports_dir = tmp_path / "reports"
+    # Report must land in the correct output_dir/reports/ (not CWD)
+    reports_dir = output_dir / "reports"
     md_files = list(reports_dir.glob("*.md"))
     assert md_files, f"No .md report found in {reports_dir}"
 
