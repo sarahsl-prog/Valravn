@@ -23,6 +23,22 @@ def run_forensic_tool(state: dict) -> dict:
     stdout_path = analysis_dir / f"{inv_id}.stdout"
     stderr_path = analysis_dir / f"{inv_id}.stderr"
 
+    # FR-007: output paths must not reside under any evidence directory
+    evidence_refs = state["task"].evidence_refs
+    for ev in evidence_refs:
+        ev_path = Path(ev).resolve()
+        # Treat each evidence ref as a protected tree: if the ref is a file,
+        # its parent directory is the protected root; if it is already a
+        # directory, use it directly.
+        ev_dir = ev_path if ev_path.is_dir() else ev_path.parent
+        out_under_ev = stdout_path.resolve().is_relative_to(ev_dir)
+        err_under_ev = stderr_path.resolve().is_relative_to(ev_dir)
+        if out_under_ev or err_under_ev:
+            raise ValueError(
+                f"Output path {stdout_path.parent} is under evidence directory {ev_dir}. "
+                "Set --output-dir to a non-evidence location."
+            )
+
     started = datetime.now(timezone.utc)
     t0 = time.monotonic()
 
@@ -51,6 +67,9 @@ def run_forensic_tool(state: dict) -> dict:
         duration_seconds=duration,
         had_output=bool(proc.stdout.strip()),
     )
+
+    rec_path = analysis_dir / f"{inv_id}.record.json"
+    rec_path.write_text(rec.model_dump_json(indent=2))
 
     invocations = list(state.get("invocations") or [])
     invocations.append(rec)

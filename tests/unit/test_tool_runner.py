@@ -51,3 +51,24 @@ def test_run_tool_timestamps_utc(read_only_evidence, output_dir):
     rec = result["invocations"][-1]
     assert rec.started_at_utc.tzinfo == timezone.utc
     assert rec.completed_at_utc.tzinfo == timezone.utc
+
+
+def test_fr007_rejects_output_under_evidence(read_only_evidence, tmp_path_factory):
+    # output_dir is set to a subdirectory of the evidence directory — must be rejected
+    evidence_dir = read_only_evidence.parent
+    bad_output = evidence_dir / "subdir"
+    bad_output.mkdir(exist_ok=True)
+    state = _state(read_only_evidence, bad_output, ["echo", "x"])
+    with pytest.raises(ValueError, match="evidence directory"):
+        run_forensic_tool(state)
+
+
+def test_record_json_persisted(read_only_evidence, output_dir):
+    state = _state(read_only_evidence, output_dir, ["echo", "record"])
+    result = run_forensic_tool(state)
+    inv_id = result["_last_invocation_id"]
+    record_file = output_dir / "analysis" / f"{inv_id}.record.json"
+    assert record_file.exists(), "ToolInvocationRecord JSON was not written to disk"
+    import json
+    data = json.loads(record_file.read_text())
+    assert data["id"] == inv_id
