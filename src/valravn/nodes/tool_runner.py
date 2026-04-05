@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from valravn.models.records import ToolInvocationRecord
 from valravn.models.report import SelfCorrectionEvent, ToolFailureRecord
+from valravn.models.task import StepStatus
 
 
 class _CorrectionSpec(BaseModel):
@@ -159,10 +160,14 @@ def run_forensic_tool(state: dict) -> dict:
         else:
             # Exhausted all attempts
             step_exhausted = True
+            step.status = StepStatus.EXHAUSTED
+            first_stderr_line = (
+                proc.stderr.splitlines()[0] if proc.stderr.strip() else "no error message"
+            )
             tool_failure = ToolFailureRecord(
                 step_id=step_id,
                 invocation_ids=list(step.invocation_ids),
-                final_error=f"exit_code={rec.exit_code}",
+                final_error=f"exit_code={rec.exit_code}: {first_stderr_line}",
                 diagnostic_context=proc.stderr,
             )
 

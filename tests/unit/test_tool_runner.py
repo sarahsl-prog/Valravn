@@ -165,6 +165,10 @@ def test_exhaustion_creates_tool_failure_record(read_only_evidence, output_dir):
     assert len(result["invocations"]) == 3
     # Two self-correction events (after attempt 1 and attempt 2)
     assert len(result["_self_corrections"]) == 2
+    # PlannedStep.status must be EXHAUSTED (T027)
+    from valravn.models.task import StepStatus
+    step = result["plan"].steps[0]
+    assert step.status == StepStatus.EXHAUSTED
 
 
 def test_self_correction_event_fields(read_only_evidence, output_dir):
