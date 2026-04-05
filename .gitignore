@@ -2,12 +2,15 @@
 .venv/
 
 __pycache__/
-*.pyc   
+*.pyc
 
 # Jupyter Notebook checkpoints
-.ipynb_checkpoints/ 
+.ipynb_checkpoints/
 
 # VS Code settings
 .vscode/
+
+# Build artifacts
+*.egg-info/
 
 specify.txt
