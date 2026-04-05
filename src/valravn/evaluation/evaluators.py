@@ -82,6 +82,9 @@ def _eval_report_completeness(report: FindingsReport) -> bool:
         return False
     if report.generated_at_utc is None:
         return False
+    tz = report.generated_at_utc.tzinfo
+    if tz is None or report.generated_at_utc.utcoffset().total_seconds() != 0:
+        return False
     if not report.conclusions and not report.anomalies:
         return False
     return True

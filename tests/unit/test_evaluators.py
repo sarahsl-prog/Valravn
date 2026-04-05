@@ -342,3 +342,17 @@ def test_add_to_golden_appends_multiple(tmp_path):
     assert len(lines) == 2
     assert json.loads(lines[0])["task_id"] == "id-1"
     assert json.loads(lines[1])["task_id"] == "id-2"
+
+
+def test_evaluate_report_unknown_suite_raises(tmp_path):
+    """evaluate_report raises ValueError for an unrecognised suite name."""
+    import pytest
+
+    from valravn.evaluation.evaluators import evaluate_report
+
+    report = _minimal_report()
+    report_path = tmp_path / "report.json"
+    report_path.write_text(report.model_dump_json())
+
+    with pytest.raises(ValueError, match="Unknown suite"):
+        evaluate_report(report_path, suite="nonexistent-suite")
