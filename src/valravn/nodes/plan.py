@@ -100,6 +100,11 @@ def update_plan(state: dict) -> dict:
     if state.get("_tool_failure") is not None:
         tool_failures.append(state["_tool_failure"])
 
+    # Append follow-up steps if any (T016)
+    follow_up_steps = list(state.get("_follow_up_steps") or [])
+    if follow_up_steps:
+        plan.add_steps(follow_up_steps)
+
     next_step = plan.next_pending_step()
     next_id = next_step.id if next_step else None
 
@@ -113,6 +118,7 @@ def update_plan(state: dict) -> dict:
         "_pending_anomalies": False,
         "_tool_failure": None,
         "_tool_failures": tool_failures,
+        "_follow_up_steps": [],
     }
 
 

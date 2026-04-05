@@ -98,3 +98,32 @@ def test_update_plan_marks_step_exhausted(read_only_evidence, output_dir):
     result = update_plan(state)
     assert result["plan"].steps[0].status == StepStatus.EXHAUSTED
     assert len(result["_tool_failures"]) == 1
+
+
+def test_update_plan_marks_step_failed(read_only_evidence, output_dir):
+    # _step_succeeded=False, _step_exhausted=False → FAILED
+    task = InvestigationTask(prompt="test", evidence_refs=[str(read_only_evidence)])
+    step = PlannedStep(skill_domain="sleuthkit", tool_cmd=["fls"], rationale="r")
+    plan = InvestigationPlan(task_id=task.id, steps=[step])
+    state = {
+        "task": task, "plan": plan, "invocations": [], "anomalies": [],
+        "report": None, "current_step_id": step.id, "skill_cache": {},
+        "messages": [], "_step_succeeded": False, "_output_dir": str(output_dir),
+        "_step_exhausted": False, "_tool_failure": None, "_tool_failures": [],
+    }
+    result = update_plan(state)
+    assert result["plan"].steps[0].status == StepStatus.FAILED
+
+
+def test_update_plan_current_step_id_none_when_no_steps_remain(read_only_evidence, output_dir):
+    task = InvestigationTask(prompt="test", evidence_refs=[str(read_only_evidence)])
+    step = PlannedStep(skill_domain="sleuthkit", tool_cmd=["fls"], rationale="r")
+    plan = InvestigationPlan(task_id=task.id, steps=[step])
+    state = {
+        "task": task, "plan": plan, "invocations": [], "anomalies": [],
+        "report": None, "current_step_id": step.id, "skill_cache": {},
+        "messages": [], "_step_succeeded": True, "_output_dir": str(output_dir),
+        "_step_exhausted": False, "_tool_failure": None, "_tool_failures": [],
+    }
+    result = update_plan(state)
+    assert result["current_step_id"] is None

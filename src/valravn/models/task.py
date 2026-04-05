@@ -56,6 +56,10 @@ class InvestigationPlan(BaseModel):
                 return
         raise KeyError(f"Step {step_id} not found")
 
+    def add_steps(self, steps: list[PlannedStep]) -> None:
+        self.steps.extend(steps)
+        self.last_updated_utc = datetime.now(timezone.utc)
+
 
 class InvestigationTask(BaseModel):
     id: str = ""
