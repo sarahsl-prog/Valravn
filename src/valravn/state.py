@@ -34,5 +34,6 @@ class AgentState(TypedDict):
     _tool_failure: ToolFailureRecord | None
     _tool_failures: list[ToolFailureRecord]
     _self_corrections: list[SelfCorrectionEvent]
+    _self_assessments: list[dict]
     _conclusions: list[Any]
     _follow_up_steps: list[PlannedStep]

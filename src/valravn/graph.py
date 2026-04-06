@@ -54,6 +54,7 @@ def _build_graph(checkpointer: SqliteSaver) -> object:
     from valravn.nodes.conclusions import synthesize_conclusions
     from valravn.nodes.plan import plan_investigation, update_plan
     from valravn.nodes.report import write_findings_report
+    from valravn.nodes.self_assess import assess_progress
     from valravn.nodes.skill_loader import load_skill
     from valravn.nodes.tool_runner import run_forensic_tool
 
@@ -76,6 +77,7 @@ def _build_graph(checkpointer: SqliteSaver) -> object:
 
     builder.add_node("plan_investigation", plan_investigation)
     builder.add_node("load_skill", load_skill)
+    builder.add_node("assess_progress", assess_progress)
     builder.add_node("run_forensic_tool", run_forensic_tool)
     builder.add_node("check_anomalies", check_anomalies)
     builder.add_node("record_anomaly", record_anomaly)
@@ -85,7 +87,8 @@ def _build_graph(checkpointer: SqliteSaver) -> object:
 
     builder.add_edge(START, "plan_investigation")
     builder.add_conditional_edges("plan_investigation", route_after_planning)
-    builder.add_edge("load_skill", "run_forensic_tool")
+    builder.add_edge("load_skill", "assess_progress")
+    builder.add_edge("assess_progress", "run_forensic_tool")
     builder.add_edge("run_forensic_tool", "check_anomalies")
     builder.add_conditional_edges("check_anomalies", route_after_anomaly_check)
     builder.add_edge("record_anomaly", "update_plan")
@@ -138,6 +141,7 @@ def run(task: InvestigationTask, app_cfg: AppConfig, out_cfg: OutputConfig) -> i
         "_tool_failure": None,
         "_last_invocation_id": None,
         "_detected_anomaly_data": None,
+        "_self_assessments": [],
     }
 
     config = {
