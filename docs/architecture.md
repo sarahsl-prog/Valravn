@@ -25,6 +25,32 @@ record_anomaly ──────────────► update_plan ──�
 
 ---
 
+## State Diagram
+
+```mermaid
+stateDiagram-v2
+    [*] --> plan_investigation
+    plan_investigation --> load_skill : steps exist
+    plan_investigation --> write_findings_report : no steps
+    
+    load_skill --> run_forensic_tool
+    
+    run_forensic_tool --> check_anomalies
+    
+    check_anomalies --> record_anomaly : anomaly detected
+    check_anomalies --> update_plan : clean
+    
+    record_anomaly --> update_plan
+    
+    update_plan --> load_skill : next step pending
+    update_plan --> write_findings_report : no more steps
+    update_plan --> update_plan : follow-up steps added
+    
+    write_findings_report --> [*]
+```
+
+---
+
 ## Nodes
 
 ### `plan_investigation`

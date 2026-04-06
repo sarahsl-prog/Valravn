@@ -252,3 +252,26 @@ def test_record_anomaly_clears_pending_flag(read_only_evidence, output_dir):
     result = record_anomaly(state)
 
     assert result["_pending_anomalies"] is False
+
+
+def test_record_anomaly_generates_follow_up_with_strings_cmd(read_only_evidence, output_dir):
+    """Follow-up step uses strings -n 20 for deeper analysis."""
+    detected_data = {
+        "anomaly_detected": True,
+        "description": "Suspicious process",
+        "forensic_significance": "potential malware",
+        "category": "orphaned_relationship",
+    }
+
+    state = _base_state(
+        read_only_evidence,
+        output_dir,
+        detected_anomaly_data=detected_data,
+    )
+
+    result = record_anomaly(state)
+
+    follow_up = result["_follow_up_steps"][0]
+    assert "strings" in " ".join(follow_up.tool_cmd)
+    assert "-n" in " ".join(follow_up.tool_cmd)
+    assert "20" in " ".join(follow_up.tool_cmd)
