@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(source *)",
+      "Bash(pytest *)",
+      "Bash(tee *)",
+      "Bash(pip install *)",
+      "Bash(python3 *)",
+      "Bash(chmod *)",
+      "Bash(ruff *)",
+      "Bash(timeout *)",
+      "Bash(pkill *)",
+      "Bash(sleep *)",
+      "Bash(git add *)",
+      "Bash(git reset *)",
+      "Bash(git commit *)"
+    ]
+  },
+  "$version": 3
+}
