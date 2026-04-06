@@ -3,8 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from valravn.training.rcl_loop import RCLTrainer
 from valravn.training.reflector import ReflectionDiagnostic
 
@@ -43,7 +41,7 @@ def test_rcl_loop_loads_existing_state(tmp_path: Path) -> None:
 
 
 def test_rcl_loop_processes_case_result(tmp_path: Path) -> None:
-    """process_investigation_result calls reflector and mutator on actionable_gap, updates replay buffer."""
+    """process_investigation_result calls reflector/mutator on actionable_gap."""
     mock_diagnostic = ReflectionDiagnostic(
         attribution="actionable_gap",
         root_cause="Agent skipped hash verification step",
@@ -54,7 +52,10 @@ def test_rcl_loop_processes_case_result(tmp_path: Path) -> None:
     initial_version = trainer.playbook.version
 
     with (
-        patch("valravn.training.rcl_loop.reflect_on_trajectory", return_value=mock_diagnostic) as mock_reflect,
+        patch(
+            "valravn.training.rcl_loop.reflect_on_trajectory",
+            return_value=mock_diagnostic,
+        ) as mock_reflect,
         patch("valravn.training.rcl_loop.apply_mutation") as mock_mutate,
     ):
         result = trainer.process_investigation_result(

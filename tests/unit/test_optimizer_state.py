@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from valravn.training.optimizer_state import OptimizerState
 
 

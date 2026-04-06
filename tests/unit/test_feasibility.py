@@ -3,8 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from valravn.training.feasibility import FeasibilityMemory, FeasibilityRule
 
 
@@ -52,7 +50,9 @@ def test_feasibility_blocks_destructive_commands():
 def test_feasibility_add_custom_rule():
     mem = FeasibilityMemory()
 
-    def block_yara_on_mnt(cmd: list[str], evidence_refs: list[str], output_dir: str) -> tuple[bool, str]:
+    def block_yara_on_mnt(
+        cmd: list[str], evidence_refs: list[str], output_dir: str,
+    ) -> tuple[bool, str]:
         if cmd[0] == "yara" and any(arg.startswith("/mnt/") for arg in cmd[1:]):
             return False, "F999: yara scans on /mnt/ are not permitted"
         return True, ""
@@ -80,8 +80,6 @@ def test_feasibility_save_and_load_custom_rules(tmp_path: Path):
         return True, ""
 
     mem.add_rule(FeasibilityRule(rule_id="F100", description="Custom rule", check_fn=custom_check))
-    rule_count = len(mem.rules)
-
     save_path = tmp_path / "feasibility.json"
     mem.save(save_path)
 

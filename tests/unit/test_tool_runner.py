@@ -255,8 +255,8 @@ def test_retry_delay_is_applied(mocker, tmp_path):
 
 def test_tool_runner_blocks_destructive_command(tmp_path):
     """Feasibility memory should block rm commands before execution."""
+    from valravn.models.task import InvestigationPlan, InvestigationTask, PlannedStep
     from valravn.nodes.tool_runner import run_forensic_tool
-    from valravn.models.task import PlannedStep, InvestigationPlan, InvestigationTask
 
     evidence_dir = tmp_path / "evidence"
     evidence_dir.mkdir()

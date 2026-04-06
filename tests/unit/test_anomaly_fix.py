@@ -4,12 +4,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from valravn.models.records import AnomalyResponseAction
 from valravn.models.task import InvestigationPlan, InvestigationTask, PlannedStep
 from valravn.nodes.anomaly import check_anomalies, record_anomaly
-
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures

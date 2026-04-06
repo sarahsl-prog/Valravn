@@ -9,7 +9,6 @@ from valravn.evaluation.belief_revision import (
     classify_failure_mode,
 )
 
-
 # ---------------------------------------------------------------------------
 # test_revision_episode_construction
 # ---------------------------------------------------------------------------

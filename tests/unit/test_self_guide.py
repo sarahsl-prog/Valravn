@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import pytest
-
 from valravn.training.self_guide import POLARITY_REWARD_MAP, SelfGuidanceSignal, trust_coefficient
-
 
 # ---------------------------------------------------------------------------
 # trust_coefficient schedule tests

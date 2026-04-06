@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
-
 from valravn.evaluation.process_verifier import (
     ProcessCheckpoint,
     ProcessVerifier,
     compute_overthink_penalty,
 )
-
 
 # ---------------------------------------------------------------------------
 # Checkpoint definition tests

@@ -9,7 +9,6 @@ from valravn.evaluation.misalignment import (
     classify_response,
 )
 
-
 # ---------------------------------------------------------------------------
 # test_behavior_categories_exist
 # ---------------------------------------------------------------------------

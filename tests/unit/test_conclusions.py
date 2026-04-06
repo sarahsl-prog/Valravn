@@ -4,10 +4,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from valravn.models.records import AnomalyResponseAction, Anomaly, ToolInvocationRecord
+from valravn.models.records import Anomaly, AnomalyResponseAction, ToolInvocationRecord
 from valravn.models.task import InvestigationTask
 from valravn.nodes.conclusions import synthesize_conclusions
-
 
 # ---------------------------------------------------------------------------
 # Helpers

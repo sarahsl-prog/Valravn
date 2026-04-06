@@ -6,10 +6,9 @@ Uses point-biserial correlation to derive tier rewards from rollout outcomes.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from scipy.stats import pointbiserialr
-
 
 # ---------------------------------------------------------------------------
 # Action tier classification

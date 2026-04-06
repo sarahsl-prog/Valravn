@@ -7,7 +7,7 @@ Evaluates agent procedures (S-axis / strategy) and evidence quality
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 # ---------------------------------------------------------------------------
 # Data model

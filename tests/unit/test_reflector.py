@@ -26,7 +26,9 @@ def test_reflector_produces_structured_diagnostic():
 
     assert isinstance(result, ReflectionDiagnostic)
     assert result.attribution == "actionable_gap"
-    assert result.root_cause == "Agent failed to run hash verification step before moving to analysis"
+    assert result.root_cause == (
+        "Agent failed to run hash verification step before moving to analysis"
+    )
     assert "hash-check" in result.coverage_gap
 
 
@@ -46,7 +48,9 @@ def test_reflector_intractable_attribution():
         result = reflect_on_trajectory(
             success_trace="N/A — no comparable success trace available",
             failure_trace="Agent attempted all playbook steps but evidence is fully encrypted",
-            playbook_context="## Security Playbook\n\n- **rule-001**: Always verify evidence integrity",
+            playbook_context=(
+                "## Security Playbook\n\n- **rule-001**: Always verify evidence integrity"
+            ),
         )
 
     assert isinstance(result, ReflectionDiagnostic)

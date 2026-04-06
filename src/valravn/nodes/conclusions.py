@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
-from typing import Literal
-
 from pydantic import BaseModel
 
 _SYSTEM_PROMPT = """\

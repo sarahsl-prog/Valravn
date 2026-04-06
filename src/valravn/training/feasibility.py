@@ -68,7 +68,10 @@ def _make_f001() -> FeasibilityRule:
         if binary in {"cp", "mv"} and len(cmd) >= 3:
             destination = cmd[-1]
             if _under_evidence(destination):
-                return False, f"F001: {binary} destination '{destination}' is inside an evidence path"
+                return (
+                    False,
+                    f"F001: {binary} destination '{destination}' is inside an evidence path",
+                )
 
         # Redirection operators and flags that introduce an output path
         write_flags = {">", ">>", "-o", "--output", "-w", "--write"}
@@ -76,7 +79,11 @@ def _make_f001() -> FeasibilityRule:
             if arg in write_flags and i + 1 < len(cmd):
                 target = cmd[i + 1]
                 if _under_evidence(target):
-                    return False, f"F001: output argument '{target}' (after '{arg}') is inside an evidence path"
+                    return (
+                        False,
+                        f"F001: output argument '{target}' "
+                        f"(after '{arg}') is inside an evidence path",
+                    )
 
         return True, ""
 

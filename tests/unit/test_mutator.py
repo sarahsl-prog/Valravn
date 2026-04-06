@@ -89,7 +89,9 @@ def test_mutator_delete_operation():
             playbook=playbook,
             optimizer_state=optimizer_state,
             iteration=3,
-            diagnostic_text="execution_variance: rule-002 caused agent to over-investigate low-risk artifacts",
+            diagnostic_text=(
+                "execution_variance: rule-002 caused agent to over-investigate low-risk artifacts"
+            ),
         )
 
     assert "rule-002" not in playbook.entries

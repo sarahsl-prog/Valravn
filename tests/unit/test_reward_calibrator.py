@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from valravn.evaluation.reward_calibrator import (
     ActionTierClassifier,
     IterativeRewardCalibrator,
