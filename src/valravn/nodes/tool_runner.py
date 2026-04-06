@@ -134,6 +134,32 @@ def run_forensic_tool(state: dict) -> dict:
     invocations: list[ToolInvocationRecord] = list(state.get("invocations") or [])
     self_corrections: list[SelfCorrectionEvent] = list(state.get("_self_corrections") or [])
 
+    # Feasibility check — block unsafe commands before execution
+    from valravn.training.feasibility import FeasibilityMemory
+
+    feasibility = FeasibilityMemory()
+    passed, violations = feasibility.check(
+        cmd=step.tool_cmd,
+        evidence_refs=[str(r) for r in evidence_refs],
+        output_dir=str(output_dir),
+    )
+    if not passed:
+        tool_failure = ToolFailureRecord(
+            step_id=step_id,
+            invocation_ids=[],
+            final_error=f"Feasibility check blocked execution: {'; '.join(violations)}",
+            diagnostic_context="\n".join(violations),
+        )
+        return {
+            "invocations": invocations,
+            "plan": plan,
+            "_step_succeeded": False,
+            "_step_exhausted": True,
+            "_last_invocation_id": None,
+            "_self_corrections": self_corrections,
+            "_tool_failure": tool_failure,
+        }
+
     last_inv_id: str | None = None
     tool_failure: ToolFailureRecord | None = None
     step_succeeded = False

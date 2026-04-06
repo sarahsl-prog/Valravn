@@ -253,6 +253,46 @@ def test_retry_delay_is_applied(mocker, tmp_path):
     mock_sleep.assert_called_once_with(1.5)
 
 
+def test_tool_runner_blocks_destructive_command(tmp_path):
+    """Feasibility memory should block rm commands before execution."""
+    from valravn.nodes.tool_runner import run_forensic_tool
+    from valravn.models.task import PlannedStep, InvestigationPlan, InvestigationTask
+
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+    evidence = evidence_dir / "evidence.raw"
+    evidence.write_bytes(b"\x00")
+    evidence.chmod(0o444)
+
+    step = PlannedStep(
+        skill_domain="sleuthkit",
+        tool_cmd=["rm", "-rf", "/tmp/something"],
+        rationale="test destructive command",
+    )
+    plan = InvestigationPlan(task_id="t1", steps=[step])
+    task = InvestigationTask.__new__(InvestigationTask)
+    object.__setattr__(task, "evidence_refs", [str(evidence)])
+
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    state = {
+        "plan": plan,
+        "current_step_id": step.id,
+        "task": task,
+        "invocations": [],
+        "_output_dir": str(output_dir),
+        "_retry_config": {"max_attempts": 1, "timeout_seconds": 60},
+        "_self_corrections": [],
+    }
+
+    result = run_forensic_tool(state)
+    assert result["_step_exhausted"] is True
+    assert result["_tool_failure"] is not None
+    assert "blocked" in result["_tool_failure"].final_error.lower() or \
+           "feasibility" in result["_tool_failure"].final_error.lower()
+
+
 def test_tool_timeout_sets_exit_code_minus_one(read_only_evidence, output_dir):
     """Tool timeout (after 1hr) results in exit_code=-1."""
     # The timeout handling is in _run_single_attempt, verify by mocking subprocess.run
