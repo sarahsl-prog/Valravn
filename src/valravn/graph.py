@@ -51,6 +51,7 @@ class FileTracer(BaseCallbackHandler):
 
 def _build_graph(checkpointer: SqliteSaver) -> object:
     from valravn.nodes.anomaly import check_anomalies, record_anomaly
+    from valravn.nodes.conclusions import synthesize_conclusions
     from valravn.nodes.plan import plan_investigation, update_plan
     from valravn.nodes.report import write_findings_report
     from valravn.nodes.skill_loader import load_skill
@@ -63,13 +64,13 @@ def _build_graph(checkpointer: SqliteSaver) -> object:
 
     def route_after_planning(state: AgentState) -> str:
         if state.get("current_step_id") is None:
-            return "write_findings_report"
+            return "synthesize_conclusions"
         return "load_skill"
 
     def route_next_step(state: AgentState) -> str:
         if state["plan"].next_pending_step() is not None:
             return "load_skill"
-        return "write_findings_report"
+        return "synthesize_conclusions"
 
     builder: StateGraph = StateGraph(AgentState)
 
@@ -79,6 +80,7 @@ def _build_graph(checkpointer: SqliteSaver) -> object:
     builder.add_node("check_anomalies", check_anomalies)
     builder.add_node("record_anomaly", record_anomaly)
     builder.add_node("update_plan", update_plan)
+    builder.add_node("synthesize_conclusions", synthesize_conclusions)
     builder.add_node("write_findings_report", write_findings_report)
 
     builder.add_edge(START, "plan_investigation")
@@ -88,6 +90,7 @@ def _build_graph(checkpointer: SqliteSaver) -> object:
     builder.add_conditional_edges("check_anomalies", route_after_anomaly_check)
     builder.add_edge("record_anomaly", "update_plan")
     builder.add_conditional_edges("update_plan", route_next_step)
+    builder.add_edge("synthesize_conclusions", "write_findings_report")
     builder.add_edge("write_findings_report", END)
 
     return builder.compile(checkpointer=checkpointer)
