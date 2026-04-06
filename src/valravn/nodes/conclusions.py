@@ -4,6 +4,8 @@ from pathlib import Path
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
+from typing import Literal
+
 from pydantic import BaseModel
 
 _SYSTEM_PROMPT = """\
@@ -26,7 +28,7 @@ MAX_STDOUT_CHARS = 10_000
 class _ConclusionSpec(BaseModel):
     statement: str
     supporting_invocation_ids: list[str]
-    confidence: str  # "high", "medium", "low"
+    confidence: Literal["high", "medium", "low"]
 
 
 class _ConclusionsOutput(BaseModel):
