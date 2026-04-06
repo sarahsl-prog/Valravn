@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 from datetime import timezone as tz2
 from pathlib import Path
@@ -58,6 +59,36 @@ def test_investigation_task_accepts_read_only_evidence(read_only_evidence):
     task = InvestigationTask(prompt="find files", evidence_refs=[str(read_only_evidence)])
     assert task.id
     assert task.created_at_utc.tzinfo == timezone.utc
+
+
+def test_investigation_task_accepts_multiple_evidence(tmp_path):
+    """InvestigationTask accepts multiple evidence paths."""
+    ev1 = tmp_path / "ev1.raw"
+    ev2 = tmp_path / "ev2.raw"
+    ev3 = tmp_path / "ev3.raw"
+    for ev in (ev1, ev2, ev3):
+        ev.write_bytes(b"x")
+        os.chmod(ev, 0o444)
+
+    task = InvestigationTask(
+        prompt="test",
+        evidence_refs=[str(ev1), str(ev2), str(ev3)]
+    )
+    assert len(task.evidence_refs) == 3
+    assert task.id
+
+
+def test_investigation_task_rejects_multiple_mixed_evidence(tmp_path):
+    """InvestigationTask rejects when any evidence is writable."""
+    ev1 = tmp_path / "ev1.raw"
+    ev2 = tmp_path / "ev2.raw"
+    ev1.write_bytes(b"x")
+    os.chmod(ev1, 0o444)
+    ev2.write_bytes(b"x")
+    # ev2 is writable (default)
+
+    with pytest.raises(ValidationError, match="writable"):
+        InvestigationTask(prompt="test", evidence_refs=[str(ev1), str(ev2)])
 
 
 # --- records.py tests ---

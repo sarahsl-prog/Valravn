@@ -108,16 +108,39 @@ See [docs/configuration.md](docs/configuration.md) for the full configuration re
 
 ```bash
 # Unit tests — no SIFT tools required
-pytest tests/unit/ -v
+pytest tests/unit/ -v --cov=src/valravn --cov-report=term-missing
 
 # Integration tests — requires SIFT tools on PATH
-pytest tests/integration/ -v -m integration
+pytest tests/integration/ -v -m integration --cov=src/valravn
 
-# All tests
-pytest -v
+# All tests with coverage
+pytest -v --cov=src/valravn --cov-report=term-missing --cov-report=html
 
 # Linting
 ruff check .
+```
+
+### Test Coverage Status
+
+| Module | Coverage |
+|--------|----------|
+| **models/** | 100% |
+| **nodes/plan.py** | 94% |
+| **nodes/tool_runner.py** | 94% |
+| **nodes/anomaly.py** | 95% |
+| **nodes/skill_loader.py** | 95% |
+| **nodes/report.py** | 77% |
+| **evaluation/evaluators.py** | 77% |
+| **cli.py** | 0% (requires integration) |
+| **graph.py** | 0% (requires integration) |
+| **evaluation/datasets.py** | 0% (tests exist) |
+
+**Overall: ~73% unit, ~66% with integration**  
+*Coverage gaps in CLI/graph due to external LLM/SIFT tool dependencies.*
+
+**Run coverage report:**
+```bash
+open htmlcov/index.html  # View detailed coverage HTML
 ```
 
 ---

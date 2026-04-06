@@ -1,3 +1,5 @@
+# Re-import subprocess for timeout test
+import subprocess
 from datetime import timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -215,3 +217,21 @@ def test_exhaustion_exit_code_one(read_only_evidence, output_dir):
     assert isinstance(result["_tool_failure"], ToolFailureRecord)
     assert result["_tool_failure"].step_id == state["current_step_id"]
     assert "exit_code=2" in result["_tool_failure"].final_error
+
+
+def test_tool_timeout_sets_exit_code_minus_one(read_only_evidence, output_dir):
+    """Tool timeout (after 1hr) results in exit_code=-1."""
+    # The timeout handling is in _run_single_attempt, verify by mocking subprocess.run
+    timeout_error = subprocess.TimeoutExpired(
+        cmd=["sleep", "10"],
+        timeout=3600,
+    )
+
+    with patch("subprocess.run", side_effect=timeout_error):
+        state = _state(read_only_evidence, output_dir, ["sleep", "10"])
+        result = run_forensic_tool(state)
+
+    rec = result["invocations"][-1]
+    assert rec.exit_code == -1
+    assert rec.success is False
+    assert "timed out" in rec.stderr_path.read_text()
