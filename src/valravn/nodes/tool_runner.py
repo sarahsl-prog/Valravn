@@ -10,7 +10,6 @@ from pydantic import BaseModel
 
 from valravn.models.records import ToolInvocationRecord
 from valravn.models.report import SelfCorrectionEvent, ToolFailureRecord
-from valravn.models.task import StepStatus
 
 
 class _CorrectionSpec(BaseModel):
@@ -130,6 +129,7 @@ def run_forensic_tool(state: dict) -> dict:
     retry_cfg = state.get("_retry_config") or {}
     max_attempts: int = retry_cfg.get("max_attempts", 3)
     timeout_seconds: int = retry_cfg.get("timeout_seconds", 3600)
+    retry_delay: float = retry_cfg.get("retry_delay_seconds", 0.0)
 
     invocations: list[ToolInvocationRecord] = list(state.get("invocations") or [])
     self_corrections: list[SelfCorrectionEvent] = list(state.get("_self_corrections") or [])
@@ -169,10 +169,11 @@ def run_forensic_tool(state: dict) -> dict:
             )
             self_corrections.append(event)
             step.tool_cmd = correction.corrected_cmd
+            if retry_delay > 0:
+                time.sleep(retry_delay)
         else:
             # Exhausted all attempts
             step_exhausted = True
-            step.status = StepStatus.EXHAUSTED
             first_stderr_line = (
                 proc.stderr.splitlines()[0] if proc.stderr.strip() else "no error message"
             )

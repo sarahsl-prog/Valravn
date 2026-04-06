@@ -124,6 +124,7 @@ def run(task: InvestigationTask, app_cfg: AppConfig, out_cfg: OutputConfig) -> i
         "_retry_config": {
             "max_attempts": app_cfg.retry.max_attempts,
             "retry_delay_seconds": app_cfg.retry.retry_delay_seconds,
+            "timeout_seconds": app_cfg.retry.timeout_seconds,
         },
         "_step_succeeded": False,
         "_step_exhausted": False,

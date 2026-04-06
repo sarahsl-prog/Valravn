@@ -10,6 +10,7 @@ from pydantic import BaseModel
 class RetryConfig(BaseModel):
     max_attempts: int = 3
     retry_delay_seconds: float = 0.0
+    timeout_seconds: int = 3600
 
 
 class OutputConfig(BaseModel):
