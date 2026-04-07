@@ -51,8 +51,10 @@ class FileTracer(BaseCallbackHandler):
 
 def _build_graph(checkpointer: SqliteSaver) -> object:
     from valravn.nodes.anomaly import check_anomalies, record_anomaly
+    from valravn.nodes.conclusions import synthesize_conclusions
     from valravn.nodes.plan import plan_investigation, update_plan
     from valravn.nodes.report import write_findings_report
+    from valravn.nodes.self_assess import assess_progress
     from valravn.nodes.skill_loader import load_skill
     from valravn.nodes.tool_runner import run_forensic_tool
 
@@ -63,31 +65,35 @@ def _build_graph(checkpointer: SqliteSaver) -> object:
 
     def route_after_planning(state: AgentState) -> str:
         if state.get("current_step_id") is None:
-            return "write_findings_report"
+            return "synthesize_conclusions"
         return "load_skill"
 
     def route_next_step(state: AgentState) -> str:
         if state["plan"].next_pending_step() is not None:
             return "load_skill"
-        return "write_findings_report"
+        return "synthesize_conclusions"
 
     builder: StateGraph = StateGraph(AgentState)
 
     builder.add_node("plan_investigation", plan_investigation)
     builder.add_node("load_skill", load_skill)
+    builder.add_node("assess_progress", assess_progress)
     builder.add_node("run_forensic_tool", run_forensic_tool)
     builder.add_node("check_anomalies", check_anomalies)
     builder.add_node("record_anomaly", record_anomaly)
     builder.add_node("update_plan", update_plan)
+    builder.add_node("synthesize_conclusions", synthesize_conclusions)
     builder.add_node("write_findings_report", write_findings_report)
 
     builder.add_edge(START, "plan_investigation")
     builder.add_conditional_edges("plan_investigation", route_after_planning)
-    builder.add_edge("load_skill", "run_forensic_tool")
+    builder.add_edge("load_skill", "assess_progress")
+    builder.add_edge("assess_progress", "run_forensic_tool")
     builder.add_edge("run_forensic_tool", "check_anomalies")
     builder.add_conditional_edges("check_anomalies", route_after_anomaly_check)
     builder.add_edge("record_anomaly", "update_plan")
     builder.add_conditional_edges("update_plan", route_next_step)
+    builder.add_edge("synthesize_conclusions", "write_findings_report")
     builder.add_edge("write_findings_report", END)
 
     return builder.compile(checkpointer=checkpointer)
@@ -124,6 +130,7 @@ def run(task: InvestigationTask, app_cfg: AppConfig, out_cfg: OutputConfig) -> i
         "_retry_config": {
             "max_attempts": app_cfg.retry.max_attempts,
             "retry_delay_seconds": app_cfg.retry.retry_delay_seconds,
+            "timeout_seconds": app_cfg.retry.timeout_seconds,
         },
         "_step_succeeded": False,
         "_step_exhausted": False,
@@ -134,6 +141,8 @@ def run(task: InvestigationTask, app_cfg: AppConfig, out_cfg: OutputConfig) -> i
         "_tool_failure": None,
         "_last_invocation_id": None,
         "_detected_anomaly_data": None,
+        "_self_assessments": [],
+        "_follow_up_steps": [],
     }
 
     config = {

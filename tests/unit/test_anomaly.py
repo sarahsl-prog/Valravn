@@ -151,6 +151,7 @@ def test_record_anomaly_persists_json(read_only_evidence, output_dir):
         "description": "Hash mismatch on $MFT",
         "forensic_significance": "Evidence of anti-forensic tampering",
         "category": "integrity_failure",
+        "response_action": "added_follow_up_steps",
     }
 
     state = _base_state(
@@ -178,6 +179,7 @@ def test_record_anomaly_adds_follow_up_step(read_only_evidence, output_dir):
         "description": "Timestamp contradiction in $STANDARD_INFORMATION vs $FILE_NAME",
         "forensic_significance": "Possible timestomping",
         "category": "timestamp_contradiction",
+        "response_action": "added_follow_up_steps",
     }
 
     state = _base_state(
@@ -192,7 +194,9 @@ def test_record_anomaly_adds_follow_up_step(read_only_evidence, output_dir):
     assert len(result["_follow_up_steps"]) > 0
 
     follow_up: PlannedStep = result["_follow_up_steps"][0]
-    assert "strings" in follow_up.tool_cmd
+    # timestamp_contradiction maps to log2timeline.py, not strings
+    assert "log2timeline.py" in follow_up.tool_cmd
+    assert follow_up.skill_domain == "plaso-timeline"
     assert "Follow-up investigation of anomaly" in follow_up.rationale
 
 
@@ -255,12 +259,13 @@ def test_record_anomaly_clears_pending_flag(read_only_evidence, output_dir):
 
 
 def test_record_anomaly_generates_follow_up_with_strings_cmd(read_only_evidence, output_dir):
-    """Follow-up step uses strings -n 20 for deeper analysis."""
+    """Follow-up step uses strings -n 20 for unknown/fallback category."""
     detected_data = {
         "anomaly_detected": True,
         "description": "Suspicious process",
         "forensic_significance": "potential malware",
-        "category": "orphaned_relationship",
+        "category": "unknown_category",
+        "response_action": "added_follow_up_steps",
     }
 
     state = _base_state(

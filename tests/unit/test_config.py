@@ -22,6 +22,16 @@ def test_load_config_env_override(tmp_path, monkeypatch):
     assert cfg.retry.max_attempts == 7
 
 
+def test_retry_config_timeout_default():
+    cfg = RetryConfig()
+    assert cfg.timeout_seconds == 3600
+
+
+def test_retry_config_timeout_override():
+    cfg = RetryConfig(timeout_seconds=600)
+    assert cfg.timeout_seconds == 600
+
+
 def test_output_config_dirs(tmp_path):
     cfg = OutputConfig(output_dir=tmp_path)
     assert cfg.analysis_dir == tmp_path / "analysis"

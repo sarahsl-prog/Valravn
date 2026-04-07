@@ -167,10 +167,6 @@ def test_exhaustion_creates_tool_failure_record(read_only_evidence, output_dir):
     assert len(result["invocations"]) == 3
     # Two self-correction events (after attempt 1 and attempt 2)
     assert len(result["_self_corrections"]) == 2
-    # PlannedStep.status must be EXHAUSTED (T027)
-    from valravn.models.task import StepStatus
-    step = result["plan"].steps[0]
-    assert step.status == StepStatus.EXHAUSTED
 
 
 def test_self_correction_event_fields(read_only_evidence, output_dir):
@@ -217,6 +213,84 @@ def test_exhaustion_exit_code_one(read_only_evidence, output_dir):
     assert isinstance(result["_tool_failure"], ToolFailureRecord)
     assert result["_tool_failure"].step_id == state["current_step_id"]
     assert "exit_code=2" in result["_tool_failure"].final_error
+
+
+def test_retry_delay_is_applied(mocker, tmp_path):
+    """Verify that retry_delay_seconds causes a sleep between attempts."""
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+    evidence = evidence_dir / "evidence.raw"
+    evidence.write_bytes(b"\x00")
+    evidence.chmod(0o444)
+
+    step = PlannedStep(
+        skill_domain="sleuthkit",
+        tool_cmd=["false"],  # always fails
+        rationale="test",
+    )
+    plan = InvestigationPlan(task_id="t1", steps=[step])
+    task = InvestigationTask.__new__(InvestigationTask)
+    object.__setattr__(task, "evidence_refs", [str(evidence)])
+
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    mock_sleep = mocker.patch("valravn.nodes.tool_runner.time.sleep")
+    mocker.patch("valravn.nodes.tool_runner._request_correction", return_value=mocker.MagicMock(
+        corrected_cmd=["false"], rationale="retry"
+    ))
+
+    state = {
+        "plan": plan,
+        "current_step_id": step.id,
+        "task": task,
+        "invocations": [],
+        "_output_dir": str(output_dir),
+        "_retry_config": {"max_attempts": 2, "retry_delay_seconds": 1.5, "timeout_seconds": 60},
+        "_self_corrections": [],
+    }
+    run_forensic_tool(state)
+    mock_sleep.assert_called_once_with(1.5)
+
+
+def test_tool_runner_blocks_destructive_command(tmp_path):
+    """Feasibility memory should block rm commands before execution."""
+    from valravn.models.task import InvestigationPlan, InvestigationTask, PlannedStep
+    from valravn.nodes.tool_runner import run_forensic_tool
+
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+    evidence = evidence_dir / "evidence.raw"
+    evidence.write_bytes(b"\x00")
+    evidence.chmod(0o444)
+
+    step = PlannedStep(
+        skill_domain="sleuthkit",
+        tool_cmd=["rm", "-rf", "/tmp/something"],
+        rationale="test destructive command",
+    )
+    plan = InvestigationPlan(task_id="t1", steps=[step])
+    task = InvestigationTask.__new__(InvestigationTask)
+    object.__setattr__(task, "evidence_refs", [str(evidence)])
+
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    state = {
+        "plan": plan,
+        "current_step_id": step.id,
+        "task": task,
+        "invocations": [],
+        "_output_dir": str(output_dir),
+        "_retry_config": {"max_attempts": 1, "timeout_seconds": 60},
+        "_self_corrections": [],
+    }
+
+    result = run_forensic_tool(state)
+    assert result["_step_exhausted"] is True
+    assert result["_tool_failure"] is not None
+    assert "blocked" in result["_tool_failure"].final_error.lower() or \
+           "feasibility" in result["_tool_failure"].final_error.lower()
 
 
 def test_tool_timeout_sets_exit_code_minus_one(read_only_evidence, output_dir):
