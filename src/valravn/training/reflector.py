@@ -3,11 +3,12 @@ from __future__ import annotations
 import logging
 import os
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, field_validator
 
 import mlflow
+
+from valravn.core.llm_factory import get_llm
 
 _SYSTEM_PROMPT = """\
 You are an expert DFIR training analyst comparing a successful and a failed agent trajectory.
@@ -77,9 +78,9 @@ def _log_invalid_attribution(raw: str, cleaned: str) -> None:
         pass
 
 
-def _get_reflector_llm() -> object:
-    llm = ChatAnthropic(model="claude-opus-4-6", temperature=0)
-    return llm.with_structured_output(ReflectionDiagnostic)
+def _get_reflector_llm():
+    """Get LLM for trajectory reflection with structured output."""
+    return get_llm(module="reflector", output_schema=ReflectionDiagnostic)
 
 
 def reflect_on_trajectory(

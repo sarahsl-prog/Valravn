@@ -3,9 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
+
+from valravn.core.llm_factory import get_llm
 
 _SYSTEM_PROMPT = """\
 You are an expert DFIR analyst. Given the investigation prompt, tool invocation outputs,
@@ -34,9 +35,9 @@ class _ConclusionsOutput(BaseModel):
     conclusions: list[_ConclusionSpec]
 
 
-def _get_conclusions_llm() -> object:
-    llm = ChatAnthropic(model="claude-opus-4-6", temperature=0)
-    return llm.with_structured_output(_ConclusionsOutput)
+def _get_conclusions_llm():
+    """Get LLM for conclusions synthesis with structured output."""
+    return get_llm(module="conclusions", output_schema=_ConclusionsOutput)
 
 
 def synthesize_conclusions(state: dict) -> dict:

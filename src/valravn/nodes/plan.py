@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
-from valravn.models.task import (
-    InvestigationPlan,
-    PlannedStep,
-    StepStatus,
-)
+from valravn.core.llm_factory import get_llm
+
+from valravn.models.task import InvestigationPlan, PlannedStep, StepStatus
 
 
 class _StepSpec(BaseModel):
@@ -39,9 +35,9 @@ Rules:
 """
 
 
-def _get_llm() -> object:
-    llm = ChatAnthropic(model="claude-opus-4-6", temperature=0)
-    return llm.with_structured_output(_PlanSpec)
+def _get_llm():
+    """Get LLM for investigation planning with structured output."""
+    return get_llm(module="plan", output_schema=_PlanSpec)
 
 
 def plan_investigation(state: dict) -> dict:
@@ -124,6 +120,8 @@ def update_plan(state: dict) -> dict:
 
 
 def _persist_plan(plan: InvestigationPlan, output_dir: Path) -> None:
+    import json
+
     analysis_dir = output_dir / "analysis"
     analysis_dir.mkdir(parents=True, exist_ok=True)
     plan_path = analysis_dir / "investigation_plan.json"

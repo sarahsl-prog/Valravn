@@ -3,9 +3,10 @@ from __future__ import annotations
 import logging
 import re
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, field_validator
+
+from valravn.core.llm_factory import get_llm
 
 from valravn.training.optimizer_state import OptimizerState
 from valravn.training.playbook import SecurityPlaybook
@@ -146,9 +147,11 @@ class MutationSpec(BaseModel):
         return v_stripped
 
 
-def _get_mutator_llm() -> object:
-    llm = ChatAnthropic(model="claude-opus-4-6", temperature=0)
-    return llm.with_structured_output(MutationSpec)
+def _get_mutator_llm():
+    """Get LLM for playbook mutation with structured output."""
+    # Note: Pydantic validation happens on MutationSpec instantiation
+    # which is handled separately from LLM structured output
+    return get_llm(module="mutator")
 
 
 def apply_mutation(

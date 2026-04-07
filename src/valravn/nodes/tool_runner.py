@@ -8,6 +8,8 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from valravn.core.llm_factory import get_llm
+
 from valravn.models.records import ToolInvocationRecord
 from valravn.models.report import SelfCorrectionEvent, ToolFailureRecord
 
@@ -18,10 +20,8 @@ class _CorrectionSpec(BaseModel):
 
 
 def _get_correction_llm():
-    from langchain_anthropic import ChatAnthropic
-
-    llm = ChatAnthropic(model="claude-opus-4-6", temperature=0)
-    return llm.with_structured_output(_CorrectionSpec)
+    """Get LLM for tool command correction with structured output."""
+    return get_llm(module="tool_runner", output_schema=_CorrectionSpec)
 
 
 def _request_correction(
