@@ -12,8 +12,14 @@ Valravn orchestrates forensic tool execution via a [LangGraph](https://github.co
 |-------------|---------|
 | Platform | SANS SIFT Ubuntu Workstation (x86-64) |
 | Python | 3.12 |
-| Claude API key | `ANTHROPIC_API_KEY` — used for planning, anomaly detection, and self-correction |
+| LLM Provider | Anthropic, OpenAI, Ollama, or OpenRouter via unified factory |
 | SIFT tools | Volatility 3, Sleuth Kit (`fls`, `icat`, etc.), Plaso (`log2timeline.py`), YARA, EZ Tools |
+
+**Model Support:**
+- **Anthropic** (`ANTHROPIC_API_KEY`): Claude 3.x models (default)
+- **OpenAI** (`OPENAI_API_KEY`): GPT-4o, GPT-4o-mini, etc.
+- **Ollama** (`OLLAMA_BASE_URL` for local): Llama, Mistral, etc.
+- **OpenRouter** (`OPENROUTER_API_KEY` + base URL): Any model via OpenRouter
 
 No LangSmith, no external telemetry. All tracing and evaluation artifacts are stored locally.
 
@@ -73,10 +79,13 @@ valravn investigate \
     traces/<run-id>.jsonl          # JSONL trace of every LLM and tool event
     <uuid>.stdout / .stderr        # raw tool output per invocation
     <uuid>.record.json             # ToolInvocationRecord metadata
+    abandoned_cases.jsonl          # (RCL training) rejected trajectories for later review
   reports/
-    <timestamp>_<slug>.md          # Markdown findings report
+    <timestamp>_<slug>.md           # Markdown findings report
     <timestamp>_<slug>.json        # Machine-readable FindingsReport
 ```
+
+**Checkpoint Database:** The SQLite `checkpoints.db` enables crash recovery. Re-running with the same `thread_id` resumes from the last completed node. Configure automatic cleanup via `config.yaml` (see [docs/configuration.md](docs/configuration.md)).
 
 ---
 
@@ -92,12 +101,42 @@ retry:
 mlflow:
   tracking_uri: http://127.0.0.1:5000
   experiment_name: valravn-evaluation
+
+# Multi-provider LLM configuration (per-module model selection)
+models:
+  plan: anthropic:claude-3-5-sonnet-20241022
+  reflector: anthropic:claude-3-5-sonnet-20241022
+  mutator: anthropic:claude-3-5-sonnet-20241022
+  anomaly: anthropic:claude-3-5-sonnet-20241022
+  conclusions: anthropic:claude-3-5-sonnet-20241022
+  tool_runner: anthropic:claude-3-5-sonnet-20241022
 ```
 
 Override retry limit at runtime without editing the file:
 
 ```bash
 VALRAVN_MAX_RETRIES=5 valravn investigate --prompt "..." --evidence /mnt/...
+```
+
+**Per-provider environment variables:**
+
+```bash
+# Anthropic (default)
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# OpenAI
+export OPENAI_API_KEY=sk-...
+
+# Ollama (local)
+export OLLAMA_BASE_URL=http://localhost:11434
+
+# OpenRouter
+export OPENROUTER_API_KEY=sk-or-...
+export OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+
+# Per-module model override
+export VALRAVN_PLAN_MODEL=openai:gpt-4o
+export VALRAVN_MUTATOR_MODEL=anthropic:claude-3-opus-20240229
 ```
 
 See [docs/configuration.md](docs/configuration.md) for the full configuration reference.
@@ -177,23 +216,36 @@ Available suites: `anomaly-detection`, `citation-coverage`, `evidence-integrity`
 
 ```
 src/valravn/
-  cli.py              # CLI entry point (valravn investigate ...)
-  graph.py            # LangGraph StateGraph — nodes, edges, conditional routing
-  state.py            # AgentState TypedDict
-  config.py           # AppConfig, OutputConfig, RetryConfig
+  cli.py                # CLI entry point (valravn investigate ...)
+  graph.py              # LangGraph StateGraph — nodes, edges, conditional routing
+  state.py              # AgentState TypedDict
+  config.py             # AppConfig, OutputConfig, RetryConfig
+  checkpoint_cleanup.py # SQLite checkpoint management (Q6)
+  core/
+    llm_factory.py      # Multi-provider LLM factory (Q4) — Anthropic, OpenAI, Ollama, OpenRouter
   nodes/
-    plan.py           # LLM-driven investigation planner
-    skill_loader.py   # Loads domain SKILL.md files from ~/.claude/skills/
-    tool_runner.py    # Subprocess executor with retry and self-correction
-    anomaly.py        # LLM-driven anomaly detector and follow-up generator
-    report.py         # Markdown + JSON report writer
+    plan.py             # LLM-driven investigation planner
+    skill_loader.py     # Loads domain SKILL.md files from ~/.claude/skills/
+    tool_runner.py      # Subprocess executor with retry and self-correction
+    anomaly.py          # LLM-driven anomaly detector and follow-up generator
+    report.py           # Markdown + JSON report writer
+    conclusions.py      # (New) LLM-driven conclusion synthesis
+    self_assess.py      # (New) Self-assessment node for progress evaluation
   models/
-    task.py           # InvestigationTask, InvestigationPlan, PlannedStep
-    records.py        # ToolInvocationRecord, Anomaly
-    report.py         # FindingsReport, Conclusion, ToolFailureRecord
+    task.py             # InvestigationTask, InvestigationPlan, PlannedStep
+    records.py          # ToolInvocationRecord, Anomaly
+    report.py           # FindingsReport, Conclusion, ToolFailureRecord
+  training/             # RCL training system (Q1-Q5)
+    playbook.py         # SecurityPlaybook with protected entries (Q5)
+    replay_buffer.py    # ReplayBuffer with archiving (Q1)
+    reflector.py        # Trajectory reflection and attribution (BUG-002)
+    mutator.py          # Playbook mutation with validation (BUG-003)
+    feasibility.py      # Feasibility rules registry (Q2) + FeasibilityMemory
+    rcl_loop.py         # Main RCL training orchestration
+    feasibility.py      # Custom feasibility rules for replay buffer filtering
   evaluation/
-    evaluators.py     # MLflow-backed SC evaluators
-    datasets.py       # Golden test case management
+    evaluators.py       # MLflow-backed SC evaluators
+    datasets.py         # Golden test case management
 
 tests/
   unit/               # All mocked — no SIFT tools needed
