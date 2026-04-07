@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
+from valravn.training.feasibility import check_feasibility
 from valravn.training.mutator import apply_mutation
 from valravn.training.optimizer_state import OptimizerState
 from valravn.training.playbook import SecurityPlaybook
 from valravn.training.reflector import ReflectionDiagnostic, reflect_on_trajectory
 from valravn.training.replay_buffer import ReplayBuffer
+
+_LOGGER = logging.getLogger(__name__)
 
 _ITERATION_FILE = "iteration.json"
 
@@ -81,10 +85,28 @@ class RCLTrainer:
                 self.playbook.version += 1
 
         if not success:
-            if case_id not in self.replay_buffer.buffer:
-                self.replay_buffer.add_failure(case_id, {"case_id": case_id})
-            # Always record the failure outcome, not just on subsequent failures
-            self.replay_buffer.record_outcome(case_id, success=False)
+            # Q2: Check custom feasibility rules before adding to replay buffer
+            # Build case data from traces (can be enriched with more context)
+            case_data = {
+                "case_id": case_id,
+                "success_trace_length": len(success_trace) if success_trace else 0,
+                "failure_trace_length": len(failure_trace) if failure_trace else 0,
+            }
+            
+            # Check feasibility - skip adding if rules reject
+            is_feasible, rejection_reason = check_feasibility(case_data)
+            
+            if is_feasible:
+                if case_id not in self.replay_buffer.buffer:
+                    self.replay_buffer.add_failure(case_id, {"case_id": case_id})
+                # Always record the failure outcome, not just on subsequent failures
+                self.replay_buffer.record_outcome(case_id, success=False)
+            else:
+                _LOGGER.info(
+                    "Case %r rejected by feasibility rules: %s",
+                    case_id,
+                    rejection_reason
+                )
         else:
             self.replay_buffer.record_outcome(case_id, success=True)
 

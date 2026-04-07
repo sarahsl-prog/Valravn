@@ -1,194 +1,162 @@
+"""Custom feasibility rules registry for ReplayBuffer.
+
+Allows users to register custom constraints that determine whether
+trajectories are eligible for replay buffer storage.
+
+Example usage:
+    @register_feasibility_rule
+    def must_have_some_invocations(case):
+        return case.get("invocation_count", 0) > 0
+    
+    @register_feasibility_rule
+    def exclude_network_errors(case):
+        return "network" not in case.get("failure_reason", "")
+
+    # Check feasibility
+    is_feasible, reason = check_feasibility(case_data)
+"""
+
 from __future__ import annotations
 
-import json
-from pathlib import Path
-from typing import Callable
+import logging
+from typing import Any, Callable
+
+_LOGGER = logging.getLogger(__name__)
+
+# Registry of custom feasibility check functions
+# Each function receives the case dict and returns True if feasible
+_custom_feasibility_rules: list[Callable[[dict[str, Any]], bool]] = []
 
 
-class FeasibilityRule:
-    """A single named feasibility constraint with an associated check function."""
+def register_feasibility_rule(
+    func: Callable[[dict[str, Any]], bool],
+) -> Callable[[dict[str, Any]], bool]:
+    """Register a custom feasibility check function.
 
-    def __init__(
-        self,
-        rule_id: str,
-        description: str,
-        check_fn: Callable[[list[str], list[str], str], tuple[bool, str]],
-    ) -> None:
-        # check_fn(cmd, evidence_refs, output_dir) -> (passed: bool, violation_msg: str)
-        self.rule_id = rule_id
-        self.description = description
-        self.check_fn = check_fn
+    The function should return True if the case/trajectory is feasible for
+    replay buffer storage, False otherwise.
+
+    Rules are evaluated in registration order. If ANY rule returns False,
+    the trajectory is deemed infeasible.
+
+    Example:
+        @register_feasibility_rule
+        def must_have_tools(case):
+            return case.get("invocation_count", 0) > 0
+    
+        @register_feasibility_rule
+        def max_duration_minutes(case):
+            return case.get("duration_seconds", 0) <= 3600
+
+    Args:
+        func: Callable that takes a dict and returns bool.
+
+    Returns:
+        The registered function (for use as decorator).
+    """
+    _custom_feasibility_rules.append(func)
+    _LOGGER.debug("Registered custom feasibility rule: %s", func.__name__)
+    return func
 
 
-# ---------------------------------------------------------------------------
-# Default rule implementations
-# ---------------------------------------------------------------------------
+def unregister_feasibility_rule(
+    func: Callable[[dict[str, Any]], bool],
+) -> None:
+    """Remove a previously registered feasibility rule.
 
-_DESTRUCTIVE_COMMANDS = {"rm", "shred", "mkfs", "fdisk", "wipefs"}
-_NETWORK_COMMANDS = {"curl", "wget", "nc", "ncat", "ssh", "scp", "rsync"}
+    Args:
+        func: The function to remove.
+    """
+    if func in _custom_feasibility_rules:
+        _custom_feasibility_rules.remove(func)
+        _LOGGER.debug("Unregistered custom feasibility rule: %s", func.__name__)
 
 
-def _make_f001() -> FeasibilityRule:
-    """F001: Never write to evidence directories."""
+def clear_feasibility_rules() -> None:
+    """Clear all custom feasibility rules."""
+    _custom_feasibility_rules.clear()
+    _LOGGER.debug("Cleared all custom feasibility rules")
 
-    def check(cmd: list[str], evidence_refs: list[str], output_dir: str) -> tuple[bool, str]:
-        if not cmd or not evidence_refs:
-            return True, ""
 
-        # Resolve evidence parent directories from refs
-        evidence_dirs: list[Path] = []
-        for ref in evidence_refs:
-            p = Path(ref)
-            # Both the file itself and its parent directory are protected
-            evidence_dirs.append(p.parent if p.suffix else p)
-            evidence_dirs.append(p)
+def check_feasibility(case: dict[str, Any]) -> tuple[bool, str]:
+    """Check if a case/trajectory is feasible according to custom rules.
 
-        def _under_evidence(target_str: str) -> bool:
-            target = Path(target_str).resolve() if target_str else None
-            if target is None:
-                return False
-            for ev in evidence_dirs:
-                ev_resolved = ev.resolve()
-                try:
-                    target.relative_to(ev_resolved)
-                    return True
-                except ValueError:
-                    pass
-                # Also check without resolving (handles non-existent paths)
-                try:
-                    Path(target_str).relative_to(str(ev))
-                    return True
-                except ValueError:
-                    pass
-            return False
+    Runs all registered feasibility rules in order. If any rule returns
+    False, the trajectory is deemed infeasible.
 
-        binary = cmd[0]
+    Args:
+        case: The case dict to evaluate (e.g., {"case_id": "...", "invocation_count": 5, ...}).
 
-        # cp / mv: last argument is the destination
-        if binary in {"cp", "mv"} and len(cmd) >= 3:
-            destination = cmd[-1]
-            if _under_evidence(destination):
-                return (
-                    False,
-                    f"F001: {binary} destination '{destination}' is inside an evidence path",
-                )
-
-        # Redirection operators and flags that introduce an output path
-        write_flags = {">", ">>", "-o", "--output", "-w", "--write"}
-        for i, arg in enumerate(cmd):
-            if arg in write_flags and i + 1 < len(cmd):
-                target = cmd[i + 1]
-                if _under_evidence(target):
-                    return (
-                        False,
-                        f"F001: output argument '{target}' "
-                        f"(after '{arg}') is inside an evidence path",
-                    )
-
+    Returns:
+        Tuple of (is_feasible, reason). If feasible, reason is empty.
+        If not feasible, reason describes which rule rejected it.
+    """
+    if not _custom_feasibility_rules:
         return True, ""
 
-    return FeasibilityRule(
-        rule_id="F001",
-        description="Never write to evidence directories",
-        check_fn=check,
-    )
+    for rule in _custom_feasibility_rules:
+        try:
+            result = rule(case)
+            if not result:
+                reason = f"Feasibility rule '{rule.__name__}' rejected case"
+                _LOGGER.debug(reason)
+                return False, reason
+        except Exception as e:
+            _LOGGER.error("Feasibility rule '%s' raised exception: %s", rule.__name__, e)
+            # Continue checking other rules
+            continue
+
+    return True, ""
 
 
-def _make_f002() -> FeasibilityRule:
-    """F002: Block destructive commands."""
+def get_feasibility_rules() -> list[Callable[[dict[str, Any]], bool]]:
+    """Get a copy of the current feasibility rules.
 
-    def check(cmd: list[str], evidence_refs: list[str], output_dir: str) -> tuple[bool, str]:
-        if not cmd:
-            return True, ""
-        if cmd[0] in _DESTRUCTIVE_COMMANDS:
-            return False, f"F002: destructive command '{cmd[0]}' is not permitted"
-        return True, ""
-
-    return FeasibilityRule(
-        rule_id="F002",
-        description="Block destructive commands (rm, shred, mkfs, fdisk, wipefs)",
-        check_fn=check,
-    )
+    Returns:
+        List of registered rule functions.
+    """
+    return list(_custom_feasibility_rules)
 
 
-def _make_f003() -> FeasibilityRule:
-    """F003: Block network commands (air-gap constraint)."""
-
-    def check(cmd: list[str], evidence_refs: list[str], output_dir: str) -> tuple[bool, str]:
-        if not cmd:
-            return True, ""
-        if cmd[0] in _NETWORK_COMMANDS:
-            return False, f"F003: network command '{cmd[0]}' is not permitted (air-gap policy)"
-        return True, ""
-
-    return FeasibilityRule(
-        rule_id="F003",
-        description="Block network commands (curl, wget, nc, ncat, ssh, scp, rsync) — air-gap",
-        check_fn=check,
-    )
+def has_feasibility_rules() -> bool:
+    """Check if any custom feasibility rules are registered."""
+    return len(_custom_feasibility_rules) > 0
 
 
-# ---------------------------------------------------------------------------
-# FeasibilityMemory
-# ---------------------------------------------------------------------------
+# Predefined rule generators for common patterns
+
+def require_min_invocations(min_count: int) -> Callable[[dict[str, Any]], bool]:
+    """Generate a feasibility rule requiring minimum number of invocations.
+    
+    Example:
+        register_feasibility_rule(require_min_invocations(3))
+    """
+    def check(case: dict[str, Any]) -> bool:
+        return case.get("invocation_count", 0) >= min_count
+    check.__name__ = f"require_min_invocations({min_count})"
+    return check
 
 
-class FeasibilityMemory:
-    """Holds a list of FeasibilityRules and runs them as a safety gate."""
+def exclude_failure_pattern(pattern: str) -> Callable[[dict[str, Any]], bool]:
+    """Generate a feasibility rule excluding failures matching a pattern.
+    
+    Example:
+        register_feasibility_rule(exclude_failure_pattern("timeout"))
+    """
+    def check(case: dict[str, Any]) -> bool:
+        failure = case.get("failure_reason", "")
+        return pattern.lower() not in failure.lower()
+    check.__name__ = f"exclude_failure_pattern({pattern!r})"
+    return check
 
-    def __init__(self) -> None:
-        self.rules: list[FeasibilityRule] = []
-        self._init_default_rules()
 
-    def _init_default_rules(self) -> None:
-        self.rules.append(_make_f001())
-        self.rules.append(_make_f002())
-        self.rules.append(_make_f003())
-
-    def add_rule(self, rule: FeasibilityRule) -> None:
-        self.rules.append(rule)
-
-    def check(
-        self,
-        cmd: list[str],
-        evidence_refs: list[str],
-        output_dir: str,
-    ) -> tuple[bool, list[str]]:
-        """Run all rules against the command.
-
-        Returns (all_passed, list_of_violation_strings).
-        """
-        violations: list[str] = []
-        for rule in self.rules:
-            passed, message = rule.check_fn(cmd, evidence_refs, output_dir)
-            if not passed:
-                violations.append(message)
-        return (len(violations) == 0, violations)
-
-    def save(self, path: Path) -> None:
-        """Persist rule metadata (rule_id, description) to JSON.
-
-        check_fn callables are not serialisable, so only metadata is stored.
-        On load, default rules are re-created from code.
-        """
-        data = {
-            "rules": [
-                {"rule_id": r.rule_id, "description": r.description}
-                for r in self.rules
-            ]
-        }
-        Path(path).write_text(json.dumps(data, indent=2), encoding="utf-8")
-
-    @classmethod
-    def load(cls, path: Path) -> "FeasibilityMemory":
-        """Restore a FeasibilityMemory.
-
-        Default rules (F001-F003) are always re-initialised from code.
-        Custom rule metadata present in the file is available via the saved JSON
-        but check_fn logic must be re-registered at runtime.
-        """
-        # We always start with default rules; the file serves as a record of
-        # what was saved (including any custom rule IDs) but cannot restore
-        # arbitrary callables.
-        instance = cls()
-        return instance
+def max_duration_seconds(max_seconds: float) -> Callable[[dict[str, Any]], bool]:
+    """Generate a feasibility rule with maximum duration limit.
+    
+    Example:
+        register_feasibility_rule(max_duration_seconds(3600))  # 1 hour max
+    """
+    def check(case: dict[str, Any]) -> bool:
+        return case.get("duration_seconds", 0) <= max_seconds
+    check.__name__ = f"max_duration_seconds({max_seconds})"
+    return check
