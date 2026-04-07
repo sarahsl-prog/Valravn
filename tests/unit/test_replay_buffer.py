@@ -77,3 +77,82 @@ def test_save_and_load(tmp_path):
     assert loaded.buffer["case-1"]["passes"] == 1
     assert loaded.buffer["case-2"]["passes"] == 0
     assert loaded.buffer["case-2"]["fails"] == 1
+
+
+def test_replay_buffer_archives_rejected_cases(tmp_path):
+    """Q1: Cases rejected after n_reject failures are archived, not just deleted."""
+    archive_path = tmp_path / "abandoned_cases.jsonl"
+    buf = ReplayBuffer(n_pass=3, n_reject=2, archive_path=archive_path)
+    
+    buf.add_failure("case-doomed", {"input": "problematic evidence", "case_id": "case-doomed"})
+    assert "case-doomed" in buf.buffer
+    
+    # Second failure triggers rejection (fails=2 >= n_reject=2)
+    buf.record_outcome("case-doomed", success=False)
+    
+    # Case should be removed from buffer
+    assert "case-doomed" not in buf.buffer
+    
+    # Case should be archived
+    assert archive_path.exists()
+    with open(archive_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    assert len(lines) == 1
+    
+    import json
+    record = json.loads(lines[0])
+    assert record["case_id"] == "case-doomed"
+    assert record["case_data"]["input"] == "problematic evidence"
+    assert record["final_fails"] == 2
+    assert record["final_passes"] == 0
+    assert record["n_reject_threshold"] == 2
+    assert "archived_at" in record
+
+
+def test_replay_buffer_archive_roundtrip(tmp_path):
+    """Archive path is persisted and restored via save/load."""
+    archive_path = tmp_path / "archive.jsonl"
+    buf = ReplayBuffer(n_pass=3, n_reject=2, archive_path=archive_path)
+    buf.add_failure("case-1", {"input": "test"})
+    
+    state_path = tmp_path / "replay_state.json"
+    buf.save(state_path)
+    
+    loaded = ReplayBuffer.load(state_path)
+    assert loaded.archive_path == archive_path
+
+
+def test_replay_buffer_no_archive_path_skips_archiving(tmp_path):
+    """Without archive_path, rejected cases are silently deleted (legacy behavior)."""
+    buf = ReplayBuffer(n_pass=3, n_reject=2, archive_path=None)
+    
+    buf.add_failure("case-1", {"input": "foo"})
+    buf.record_outcome("case-1", success=False)  # Rejection triggered
+    
+    # Case removed, no crash
+    assert "case-1" not in buf.buffer
+
+
+def test_replay_buffer_appends_to_existing_archive(tmp_path):
+    """Multiple rejected cases are appended to same archive file."""
+    archive_path = tmp_path / "abandoned.jsonl"
+    buf = ReplayBuffer(n_pass=3, n_reject=2, archive_path=archive_path)
+    
+    # Reject first case
+    buf.add_failure("case-a", {"input": "a"})
+    buf.record_outcome("case-a", success=False)
+    
+    # Reject second case
+    buf.add_failure("case-b", {"input": "b"})
+    buf.record_outcome("case-b", success=False)
+    
+    import json
+    with open(archive_path, "r", encoding="utf-8") as f:
+        lines = [json.loads(line) for line in f]
+    
+    assert len(lines) == 2
+    assert lines[0]["case_id"] == "case-a"
+    assert lines[1]["case_id"] == "case-b"
+    
+    # archived_count incremented
+    assert buf.archived_count == 2

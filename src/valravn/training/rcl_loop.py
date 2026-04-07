@@ -20,6 +20,7 @@ class RCLTrainer:
         playbook_path = self.state_dir / "playbook.json"
         optimizer_path = self.state_dir / "optimizer_state.json"
         buffer_path = self.state_dir / "replay_buffer.json"
+        archive_path = self.state_dir / "abandoned_cases.jsonl"
         iteration_path = self.state_dir / _ITERATION_FILE
 
         self.playbook = (
@@ -28,9 +29,12 @@ class RCLTrainer:
         self.optimizer_state = (
             OptimizerState.load(optimizer_path) if optimizer_path.exists() else OptimizerState()
         )
-        self.replay_buffer = (
-            ReplayBuffer.load(buffer_path) if buffer_path.exists() else ReplayBuffer()
-        )
+        if buffer_path.exists():
+            self.replay_buffer = ReplayBuffer.load(buffer_path)
+        else:
+            self.replay_buffer = ReplayBuffer(
+                archive_path=archive_path
+            )
         self._iteration: int = (
             json.loads(iteration_path.read_text(encoding="utf-8"))["iteration"]
             if iteration_path.exists()
