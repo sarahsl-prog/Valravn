@@ -55,3 +55,25 @@ models:
   # plan: openai:gpt-4o
   # reflector: anthropic:claude-3-5-sonnet-20241022
   # mutator: anthropic:claude-3-5-sonnet-20241022
+
+# =============================================================================
+# CHECKPOINT CLEANUP POLICY (Q6)
+# SQLite checkpoint database grows with each investigation.
+# Configure automatic cleanup to prevent unbounded growth.
+# =============================================================================
+checkpoint_cleanup:
+  # Delete checkpoints older than this many days (default: 7)
+  retention_days: 7
+  
+  # Keep at most this many checkpoints per investigation thread (default: 1000)
+  max_checkpoints_per_thread: 100
+  
+  # Never delete below this many checkpoints per thread (default: 2)
+  # This ensures you can always resume even after aggressive cleanup
+  min_checkpoints_per_thread: 2
+  
+  # Automatically run cleanup after each investigation completes
+  auto_cleanup: true
+  
+  # Vacuum database after cleanup to reclaim disk space
+  auto_vacuum: false  # Set to true if disk space is a concern (slower cleanup)
