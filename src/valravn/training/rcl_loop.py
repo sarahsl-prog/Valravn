@@ -79,8 +79,8 @@ class RCLTrainer:
         if not success:
             if case_id not in self.replay_buffer.buffer:
                 self.replay_buffer.add_failure(case_id, {"case_id": case_id})
-            else:
-                self.replay_buffer.record_outcome(case_id, success=False)
+            # Always record the failure outcome, not just on subsequent failures
+            self.replay_buffer.record_outcome(case_id, success=False)
         else:
             self.replay_buffer.record_outcome(case_id, success=True)
 
