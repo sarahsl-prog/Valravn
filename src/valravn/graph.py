@@ -142,6 +142,7 @@ def run(task: InvestigationTask, app_cfg: AppConfig, out_cfg: OutputConfig) -> i
         "_last_invocation_id": None,
         "_detected_anomaly_data": None,
         "_self_assessments": [],
+        "_follow_up_steps": [],
     }
 
     config = {

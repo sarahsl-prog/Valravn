@@ -36,6 +36,8 @@ def trust_coefficient(step: int, total_steps: int) -> float:
       Phase III (40–80%):  constant 1.0  — full self-guidance
       Phase IV  (80–100%): linear ramp 1 → 0  — annealing
     """
+    if total_steps <= 0:
+        return 0.0
     progress = step / total_steps  # normalised in [0, 1)
 
     if progress < 0.20:

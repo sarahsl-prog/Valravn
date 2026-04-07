@@ -41,14 +41,17 @@ class ActionTierClassifier:
         had_output: bool,
         history: list[dict] | None = None,
         cmd: list[str] | None = None,
+        is_correction: bool = False,
+        anomaly_detected: bool = False,
     ) -> str:
         """Return the tier label for this tool invocation.
 
         Priority order:
           1. Non-zero exit code → "error"
           2. Command matches a previous history entry → "duplicate"
-          3. Had output (or exit_code == 0) → "evidence_gather"
-          4. Default → "evidence_gather"
+          3. Retry after prior failure → "self_correction"
+          4. Tool run revealed an anomaly → "anomaly_detected"
+          5. Default → "evidence_gather"
         """
         if exit_code != 0:
             return "error"
@@ -57,6 +60,12 @@ class ActionTierClassifier:
             for entry in history:
                 if entry.get("cmd") == cmd:
                     return "duplicate"
+
+        if is_correction:
+            return "self_correction"
+
+        if anomaly_detected:
+            return "anomaly_detected"
 
         return "evidence_gather"
 

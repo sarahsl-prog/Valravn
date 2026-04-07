@@ -77,10 +77,12 @@ class RCLTrainer:
                 self.playbook.version += 1
 
         if not success:
-            case = {"case_id": case_id}
-            self.replay_buffer.add_failure(case_id, case)
-
-        self.replay_buffer.record_outcome(case_id, success)
+            if case_id not in self.replay_buffer.buffer:
+                self.replay_buffer.add_failure(case_id, {"case_id": case_id})
+            else:
+                self.replay_buffer.record_outcome(case_id, success=False)
+        else:
+            self.replay_buffer.record_outcome(case_id, success=True)
 
         self._iteration += 1
         self.save_state()

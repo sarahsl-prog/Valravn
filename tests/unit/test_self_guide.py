@@ -66,3 +66,9 @@ def test_self_guidance_signal_structure():
     )
     assert sig_neu.polarity == "neutral"
     assert sig_neu.scalar_reward == 0.0
+
+
+def test_trust_schedule_zero_total_steps():
+    """trust_coefficient returns 0.0 when total_steps is 0 or negative."""
+    assert trust_coefficient(0, 0) == 0.0
+    assert trust_coefficient(5, -1) == 0.0

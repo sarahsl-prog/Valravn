@@ -33,6 +33,8 @@ class ReplayBuffer:
         else:
             entry["fails"] += 1
             entry["passes"] = 0
+            if entry["fails"] >= self.n_reject:
+                del self.buffer[case_id]
 
     def sample(self, n: int) -> list[dict]:
         """Return a random sample of min(n, len(buffer)) case dicts."""

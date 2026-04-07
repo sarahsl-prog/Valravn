@@ -40,6 +40,28 @@ def test_tier_classifier_duplicate():
     assert result == "duplicate"
 
 
+def test_tier_classifier_self_correction():
+    clf = ActionTierClassifier()
+    result = clf.classify(
+        tool_name="vol3",
+        exit_code=0,
+        had_output=True,
+        is_correction=True,
+    )
+    assert result == "self_correction"
+
+
+def test_tier_classifier_anomaly_detected():
+    clf = ActionTierClassifier()
+    result = clf.classify(
+        tool_name="vol3",
+        exit_code=0,
+        had_output=True,
+        anomaly_detected=True,
+    )
+    assert result == "anomaly_detected"
+
+
 def test_calibrator_produces_rewards():
     calibrator = IterativeRewardCalibrator(alpha=1.0, threshold=0.05)
     rollouts = [

@@ -52,7 +52,16 @@ def test_replay_buffer_sample_with_empty_buffer():
     assert buf.sample(5) == []
 
 
-def test_replay_buffer_save_and_load(tmp_path):
+def test_replay_buffer_rejection():
+    """Case is ejected after n_reject consecutive failures."""
+    buf = ReplayBuffer(n_pass=3, n_reject=2)
+    buf.add_failure("case-1", {"input": "foo"})  # fails=1
+    buf.record_outcome("case-1", success=False)   # fails=2 → ejected
+    assert "case-1" not in buf.buffer
+    assert buf.sample(10) == []
+
+
+def test_save_and_load(tmp_path):
     buf = ReplayBuffer(n_pass=4, n_reject=3)
     buf.add_failure("case-1", {"input": "alpha"})
     buf.add_failure("case-2", {"input": "beta"})
