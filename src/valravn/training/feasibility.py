@@ -1,7 +1,7 @@
 """Custom feasibility rules registry for ReplayBuffer.
 
 Allows users to register custom constraints that determine whether
-trajectories are eligible for replay buffer storage.
+trajectories/cases are eligible for replay buffer storage.
 
 Example usage:
     @register_feasibility_rule
@@ -14,19 +14,138 @@ Example usage:
 
     # Check feasibility
     is_feasible, reason = check_feasibility(case_data)
+
+Also includes FeasibilityMemory class for command safety validation:
+    fm = FeasibilityMemory()
+    passed, violations = fm.check(cmd=["rm", "/evidence"], evidence_refs=[...])
 """
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable
 
 _LOGGER = logging.getLogger(__name__)
 
-# Registry of custom feasibility check functions
-# Each function receives the case dict and returns True if feasible
+# Registry for replay buffer feasibility rules
 _custom_feasibility_rules: list[Callable[[dict[str, Any]], bool]] = []
 
+
+# ============================================================================
+# FeasibilityMemory for Command Safety Validation
+# ============================================================================
+
+@dataclass
+class FeasibilityRule:
+    """A symbolic constraint rule for command validation."""
+    rule_id: str
+    description: str
+    check_fn: Callable[[list[str], str], tuple[bool, str]]
+
+
+class FeasibilityMemory:
+    """Symbolic constraint validation for unsafe commands.
+    
+    Prevents execution of destructive or unsafe commands by checking
+    against a set of safety rules before tool execution.
+    """
+    
+    def __init__(self) -> None:
+        """Initialize FeasibilityMemory with default safety rules."""
+        self.rules: list[FeasibilityRule] = []
+        self._load_default_rules()
+    
+    def _load_default_rules(self) -> None:
+        """Load the default safety constraint rules."""
+        # Rule 1: No destructive commands
+        self.rules.append(FeasibilityRule(
+            rule_id="no_destructive",
+            description="Commands must not be destructive",
+            check_fn=self._check_destructive
+        ))
+        
+        # Rule 2: No evidence path modification
+        self.rules.append(FeasibilityRule(
+            rule_id="evidence_protection",
+            description="Commands must not modify evidence paths",
+            check_fn=self._check_evidence_protection
+        ))
+        
+        # Rule 3: Valid command structure
+        self.rules.append(FeasibilityRule(
+            rule_id="valid_command",
+            description="Command must have valid structure",
+            check_fn=self._check_valid_command
+        ))
+    
+    def _check_destructive(self, cmd: list[str], evidence_refs: str) -> tuple[bool, str]:
+        """Check command is not destructive."""
+        if not cmd:
+            return True, ""
+        destructive = {"rm", "del", "remove", "delete", "destroy", "overwrite", "dd"}
+        if cmd[0] in destructive or any(p in destructive for p in cmd):
+            return False, f"Command includes destructive operation"
+        return True, ""
+    
+    def _check_evidence_protection(self, cmd: list[str], evidence_refs: str) -> tuple[bool, str]:
+        """Check evidence paths are protected from modification."""
+        if not evidence_refs:
+            return True, ""
+        evidence_list = evidence_refs.split(",") if isinstance(evidence_refs, str) else []
+        for arg in cmd:
+            for ev_path in evidence_list:
+                ev_path = ev_path.strip()
+                if ev_path and arg.startswith(ev_path):
+                    return False, f"Command references evidence path {ev_path}"
+        return True, ""
+    
+    def _check_valid_command(self, cmd: list[str], evidence_refs: str) -> tuple[bool, str]:
+        """Check command has valid structure."""
+        if not cmd:
+            return False, "Empty command"
+        if not all(isinstance(s, str) for s in cmd):
+            return False, "Command arguments must be strings"
+        return True, ""
+    
+    def check(self, cmd: list[str], evidence_refs: list[str], output_dir: str) -> tuple[bool, list[str]]:
+        """Validate command against all feasibility rules.
+        
+        Args:
+            cmd: Command as list of strings
+            evidence_refs: List of evidence path strings
+            output_dir: Output directory path (for context)
+            
+        Returns:
+            Tuple of (passed, violations). passed is True if all rules pass.
+            violations is a list of error strings for failed rules.
+        """
+        violations: list[str] = []
+        
+        for rule in self.rules:
+            try:
+                result, msg = rule.check_fn(cmd, ",".join(evidence_refs))
+                if not result:
+                    violations.append(f"[{rule.rule_id}] {rule.description}: {msg}")
+            except Exception as e:
+                _LOGGER.warning("Feasibility rule %r raised exception: %s", rule.rule_id, e)
+        
+        return len(violations) == 0, violations
+    
+    def add_rule(self, rule: FeasibilityRule) -> None:
+        """Add a custom FeasibilityRule."""
+        self.rules.append(rule)
+    
+    @classmethod
+    def load(cls, path: Path) -> "FeasibilityMemory":
+        """Load FeasibilityMemory (creates new instance with default rules)."""
+        return cls()
+
+
+# ============================================================================
+# Replay Buffer Feasibility Rules Registry
+# ============================================================================
 
 def register_feasibility_rule(
     func: Callable[[dict[str, Any]], bool],
