@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from langchain_anthropic import ChatAnthropic
+import logging
+import os
+
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+import mlflow
+
+from valravn.core.llm_factory import get_llm
 
 _SYSTEM_PROMPT = """\
 You are an expert DFIR training analyst comparing a successful and a failed agent trajectory.
@@ -25,16 +31,56 @@ For each analysis provide:
                    playbook rule; leave empty for the other attribution types
 """
 
+_LOGGER = logging.getLogger(__name__)
+
+_ALLOWED_ATTRIBUTIONS = {"actionable_gap", "execution_variance", "intractable"}
+
+
+class InvalidAttributionError(ValueError):
+    """Raised when the LLM returns an invalid attribution value."""
+    pass
+
 
 class ReflectionDiagnostic(BaseModel):
     attribution: str  # "actionable_gap" | "execution_variance" | "intractable"
     root_cause: str
     coverage_gap: str = ""
 
+    @field_validator("attribution")
+    @classmethod
+    def validate_attribution(cls, v: str) -> str:
+        """Strict validation: only exact, lowercase, hyphenated values allowed."""
+        v_clean = v.strip().lower() if v else ""
+        if v_clean not in _ALLOWED_ATTRIBUTIONS:
+            # Log metric before raising for observability
+            _log_invalid_attribution(v, v_clean)
+            raise InvalidAttributionError(
+                f"attribution must be one of {_ALLOWED_ATTRIBUTIONS}, got {v!r} (cleaned: {v_clean!r})"
+            )
+        return v_clean
 
-def _get_reflector_llm() -> object:
-    llm = ChatAnthropic(model="claude-opus-4-6", temperature=0)
-    return llm.with_structured_output(ReflectionDiagnostic)
+
+def _log_invalid_attribution(raw: str, cleaned: str) -> None:
+    """Log warning and increment MLflow metric for invalid attributions."""
+    _LOGGER.warning(
+        "Invalid attribution received from reflector LLM: raw=%r, cleaned=%r",
+        raw,
+        cleaned,
+    )
+    # Attempt to log to MLflow if active
+    try:
+        if mlflow.active_run():
+            mlflow.log_metric("reflector_invalid_attribution", 1.0, step=0)
+            mlflow.log_param("reflector_invalid_attribution_raw", raw[:100])  # Truncate
+            mlflow.log_param("reflector_invalid_attribution_cleaned", cleaned[:100])
+    except Exception:
+        # Don't let MLflow issues crash the validation
+        pass
+
+
+def _get_reflector_llm():
+    """Get LLM for trajectory reflection with structured output."""
+    return get_llm(module="reflector", output_schema=ReflectionDiagnostic)
 
 
 def reflect_on_trajectory(

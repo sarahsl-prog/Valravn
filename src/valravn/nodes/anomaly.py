@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+
 from pathlib import Path
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
+
+from valravn.core.llm_factory import get_llm
 
 from valravn.models.records import Anomaly, AnomalyResponseAction
 from valravn.models.task import PlannedStep, StepStatus
@@ -61,9 +63,9 @@ _FOLLOW_UP_COMMANDS: dict[str, dict] = {
 }
 
 
-def _get_anomaly_llm() -> object:
-    llm = ChatAnthropic(model="claude-opus-4-6", temperature=0)
-    return llm.with_structured_output(_AnomalyCheckResult)
+def _get_anomaly_llm():
+    """Get LLM for anomaly detection with structured output."""
+    return get_llm(module="anomaly", output_schema=_AnomalyCheckResult)
 
 
 def check_anomalies(state: dict) -> dict:

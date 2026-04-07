@@ -3,6 +3,8 @@ from __future__ import annotations
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
+from valravn.core.llm_factory import get_llm
+
 from valravn.training.self_guide import POLARITY_REWARD_MAP, SelfGuidanceSignal
 
 _SYSTEM_PROMPT = """\
@@ -24,11 +26,9 @@ class _AssessmentResult(BaseModel):
     polarity: str  # "positive", "neutral", "negative"
 
 
-def _get_assessor_llm() -> object:
-    from langchain_anthropic import ChatAnthropic
-
-    llm = ChatAnthropic(model="claude-opus-4-6", temperature=0)
-    return llm.with_structured_output(_AssessmentResult)
+def _get_assessor_llm():
+    """Get LLM for progress assessment with structured output."""
+    return get_llm(module="self_assess", output_schema=_AssessmentResult)
 
 
 def assess_progress(state: dict) -> dict:
