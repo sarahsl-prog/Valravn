@@ -9,7 +9,7 @@ from pydantic import BaseModel, field_validator
 from valravn.core.llm_factory import get_llm
 
 from valravn.training.optimizer_state import OptimizerState
-from valravn.training.playbook import SecurityPlaybook
+from valravn.training.playbook import SecurityPlaybook, ProtectedEntryError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -224,7 +224,11 @@ def apply_mutation(
             iteration,
             spec.rationale[:200] if spec.rationale else "(no rationale)",
         )
-        playbook.delete_entry(entry_id=spec.entry_id)
+        # Q5: DELETE will raise ProtectedEntryError if entry is protected
+        try:
+            playbook.delete_entry(entry_id=spec.entry_id)
+        except ProtectedEntryError as e:
+            raise InvalidMutationError(f"DELETE blocked: {e}") from e
         optimizer_state.record_change(iteration, f"DELETE {spec.entry_id}: {spec.rationale}")
 
     elif spec.operation == "NOOP":

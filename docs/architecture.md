@@ -186,7 +186,19 @@ Key fields:
 | Anomaly list | JSON | `analysis/anomalies.json` |
 | Findings report | Markdown + JSON | `reports/<timestamp>_<slug>.*` |
 
-The SQLite checkpoint enables crash recovery: re-running with the same `thread_id` resumes from the last completed node.
+The SQLite checkpoint enables crash recovery: re-running with the same `thread_id` resumes from the last completed node. Configure automatic cleanup via `config.yaml` to prevent unbounded growth.
+
+### Checkpoint Cleanup
+
+The `CheckpointCleanupPolicy` (Q6) manages database size with configurable constraints:
+
+| Policy | Description | Default |
+|--------|-------------|---------|
+| `retention_days` | Delete checkpoints older than N days | 7 |
+| `max_checkpoints_per_thread` | Keep at most N checkpoints per thread | 1000 |
+| `min_checkpoints_per_thread` | Never delete below this threshold | 2 |
+
+Cleanup runs automatically after each investigation (if `auto_cleanup: true`) or manually via `checkpoint_cleanup.cleanup_checkpoints(db_path)`. Database vacuuming (`sqlite3 VACUUM`) can reclaim disk space if fragmentation is a concern.
 
 ---
 
@@ -217,3 +229,40 @@ FindingsReport
      conclusions, anomalies, tool_failures, self_corrections,
      investigation_plan_path
 ```
+
+---
+
+## RCL Training System (Post-Investigation Learning)
+
+Valravn includes a **Reinforcement Learning from Compiler Error Reflection** (RCL) training subsystem (Q1-Q5) that learns from failed investigations and evolves the SecurityPlaybook over time.
+
+### Components
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| `SecurityPlaybook` | `src/valravn/training/playbook.py` | Mutable rules/context for investigation guidance |
+| `ReplayBuffer` | `src/valravn/training/replay_buffer.py` | Stores failed trajectories for re-attempt |
+| `Reflector` | `src/valravn/training/reflector.py` | Diagnoses failures (attribution, root cause, coverage gap) |
+| `Mutator` | `src/valravn/training/mutator.py` | Generates playbook mutations with validation |
+| `RCLTrainer` | `src/valravn/training/rcl_loop.py` | Orchestrates the learning loop |
+
+### Learning Loop
+
+```
+Investigation completes ──► Reflector analyzes failures
+                                  │
+                                  ▼
+                         Mutator generates playbook changes
+                                  │
+                                  ▼
+                         Apply mutations to SecurityPlaybook
+                                  │
+                                  ▼
+                         RetryBuffer re-attempts archived cases
+```
+
+**Protected Entries (Q5):** The playbook supports a `protected_ids` field that marks certain rules as immutable. The mutator will raise `ProtectedEntryError` if the LLM attempts to delete protected entries, providing a human-in-the-loop safeguard.
+
+**Feasibility Rules (Q2):** Custom constraints can be registered with the replay buffer to block trajectories that fail domain-specific checks (e.g., "minimum invocations: 3", "no network timeouts") from entering the buffer.
+
+**Archiving (Q1):** Hopeless cases (after max failures) are archived to `abandoned_cases.jsonl` instead of deleted — useful for manual review or future analysis.

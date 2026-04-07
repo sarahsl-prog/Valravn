@@ -12,6 +12,8 @@
 
 ## Prerequisite: Fix Existing Logic Errors
 
+**Status:** BUG-001, BUG-002, BUG-002 completed. See commit history for details.
+
 Before adding training infrastructure, six bugs in the current codebase must be fixed. These are documented here for the implementing engineer:
 
 1. **No conclusion generation** — `_conclusions` in `graph.py:131` is `[]` and no node populates it. A new `synthesize_conclusions` node is needed (Task 2).
@@ -20,6 +22,16 @@ Before adding training infrastructure, six bugs in the current codebase must be 
 4. **Unconfigurable timeout** — `tool_runner.py:132` reads `timeout_seconds` from `_retry_config` but it's never set. Add to `RetryConfig` (Task 1).
 5. **Unused retry delay** — `config.py` defines `retry_delay_seconds` but `tool_runner.py` never uses it (Task 1).
 6. **Redundant status mutation** — `tool_runner.py:175` sets `step.status` directly; `update_plan` does it again. Remove the direct mutation (Task 1).
+
+**Completed RCL Training Features:**
+- [x] **Q1:** ReplayBuffer with archiving to abandoned_cases.jsonl
+- [x] **Q2:** Feasibility rules registry for custom trajectory filtering
+- [x] **Q4:** Multi-provider LLM factory (Anthropic, OpenAI, Ollama, OpenRouter)
+- [x] **Q5:** Protected entries for playbook DELETE safety
+- [x] **Q6:** SQLite checkpoint cleanup policy
+- [x] **BUG-001:** ReplayBuffer consecutive failure tracking fix
+- [x] **BUG-002:** Attribution validation with MLflow telemetry
+- [x] **BUG-003:** Mutation validation with safety checks
 
 ---
 

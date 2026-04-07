@@ -1,95 +1,189 @@
+"""Tests for custom feasibility rules registry (Q2)."""
+
 from __future__ import annotations
 
-import json
-from pathlib import Path
+import pytest
 
-from valravn.training.feasibility import FeasibilityMemory, FeasibilityRule
-
-
-def test_feasibility_default_rules_exist():
-    mem = FeasibilityMemory()
-    assert len(mem.rules) > 0
-    rule_ids = {r.rule_id for r in mem.rules}
-    assert "F001" in rule_ids
-    assert "F002" in rule_ids
-    assert "F003" in rule_ids
-
-
-def test_feasibility_passes_safe_command():
-    mem = FeasibilityMemory()
-    evidence_refs = ["/mnt/evidence/disk.img"]
-    output_dir = "/tmp/output"
-    # vol3 command writing to output_dir — should pass all rules
-    cmd = ["vol3", "-f", "/mnt/evidence/disk.img", "-o", output_dir, "windows.pslist"]
-    passed, violations = mem.check(cmd, evidence_refs, output_dir)
-    assert passed is True
-    assert violations == []
+from valravn.training.feasibility import (
+    check_feasibility,
+    clear_feasibility_rules,
+    exclude_failure_pattern,
+    get_feasibility_rules,
+    has_feasibility_rules,
+    max_duration_seconds,
+    register_feasibility_rule,
+    require_min_invocations,
+    unregister_feasibility_rule,
+)
 
 
-def test_feasibility_blocks_write_to_evidence():
-    mem = FeasibilityMemory()
-    evidence_refs = ["/mnt/evidence/disk.img"]
-    output_dir = "/tmp/output"
-    # cp with destination inside evidence directory
-    cmd = ["cp", "/tmp/output/result.txt", "/mnt/evidence/result.txt"]
-    passed, violations = mem.check(cmd, evidence_refs, output_dir)
-    assert passed is False
-    assert len(violations) > 0
+class TestFeasibilityRegistry:
+    """Test feasibility rules registry functionality."""
+
+    def setup_method(self) -> None:
+        """Clear registry before each test."""
+        clear_feasibility_rules()
+
+    def teardown_method(self) -> None:
+        """Clear registry after each test."""
+        clear_feasibility_rules()
+
+    def test_empty_registry_returns_feasible(self):
+        """No rules means any case is feasible."""
+        case = {"case_id": "test-1", "invocation_count": 5}
+        is_feasible, reason = check_feasibility(case)
+        assert is_feasible is True
+        assert reason == ""
+
+    def test_register_single_rule(self):
+        """Register and verify a rule is called."""
+        rule_called = []
+
+        @register_feasibility_rule
+        def must_have_id(case: dict) -> bool:
+            rule_called.append(True)
+            return "case_id" in case
+
+        assert has_feasibility_rules() is True
+        check_feasibility({"case_id": "test"})
+        assert rule_called == [True]
+
+    def test_failing_rule_rejects_case(self):
+        """If any rule returns False, case is rejected."""
+        @register_feasibility_rule
+        def reject_all(case: dict) -> bool:
+            return False
+
+        case = {"case_id": "test-1"}
+        is_feasible, reason = check_feasibility(case)
+        assert is_feasible is False
+        assert "Feasibility rule" in reason
+        assert "reject_all" in reason
+
+    def test_multiple_rules_any_fail_rejects(self):
+        """Multiple rules: any failure rejects."""
+        @register_feasibility_rule
+        def rule_one(case: dict) -> bool:
+            return True
+
+        @register_feasibility_rule
+        def rule_two(case: dict) -> bool:
+            return False  # This one rejects
+
+        @register_feasibility_rule
+        def rule_three(case: dict) -> bool:
+            return True
+
+        case = {"case_id": "test"}
+        is_feasible, _ = check_feasibility(case)
+        assert is_feasible is False
+
+    def test_all_rules_pass_allows_case(self):
+        """All rules must pass for feasibility."""
+        @register_feasibility_rule
+        def rule_one(case: dict) -> bool:
+            return case.get("invocation_count", 0) > 0
+
+        @register_feasibility_rule
+        def rule_two(case: dict) -> bool:
+            return "case_id" in case
+
+        case = {"case_id": "test-1", "invocation_count": 5}
+        is_feasible, _ = check_feasibility(case)
+        assert is_feasible is True
+
+    def test_unregister_rule(self):
+        """Unregister removes a rule."""
+        @register_feasibility_rule
+        def reject_all(case: dict) -> bool:
+            return False
+
+        assert has_feasibility_rules() is True
+        
+        unregister_feasibility_rule(reject_all)
+        
+        assert has_feasibility_rules() is False
+        is_feasible, _ = check_feasibility({"case_id": "test"})
+        assert is_feasible is True
 
 
-def test_feasibility_blocks_destructive_commands():
-    mem = FeasibilityMemory()
-    evidence_refs = ["/mnt/evidence/disk.img"]
-    output_dir = "/tmp/output"
-    cmd = ["rm", "-rf", "/tmp/output/old_results"]
-    passed, violations = mem.check(cmd, evidence_refs, output_dir)
-    assert passed is False
-    assert len(violations) > 0
+class TestFeasibilityRuleGenerators:
+    """Test built-in rule generator functions."""
+
+    def setup_method(self) -> None:
+        """Clear registry before each test."""
+        clear_feasibility_rules()
+
+    def teardown_method(self) -> None:
+        """Clear registry after each test."""
+        clear_feasibility_rules()
+
+    def test_require_min_invocations(self):
+        """Test min invocations rule generator."""
+        register_feasibility_rule(require_min_invocations(3))
+
+        # Should pass
+        assert check_feasibility({"invocation_count": 5})[0] is True
+
+        # Should fail
+        assert check_feasibility({"invocation_count": 2})[0] is False
+
+        # Default of 0 fails
+        assert check_feasibility({})[0] is False
+
+    def test_exclude_failure_pattern(self):
+        """Test exclude failure pattern rule generator."""
+        register_feasibility_rule(exclude_failure_pattern("timeout"))
+
+        # Should pass
+        assert check_feasibility({"failure_reason": "permission denied"})[0] is True
+
+        # Should fail (case insensitive)
+        assert check_feasibility({"failure_reason": "Connection Timeout Error"})[0] is False
+
+    def test_max_duration_seconds(self):
+        """Test max duration rule generator."""
+        register_feasibility_rule(max_duration_seconds(3600))  # 1 hour
+
+        # Should pass
+        assert check_feasibility({"duration_seconds": 300})[0] is True
+
+        # Should fail
+        assert check_feasibility({"duration_seconds": 7200})[0] is False
+
+    def test_get_feasibility_rules(self):
+        """Test getting registered rules."""
+        @register_feasibility_rule
+        def my_rule(case: dict) -> bool:
+            return True
+
+        rules = get_feasibility_rules()
+        assert len(rules) == 1
+        assert rules[0].__name__ == "my_rule"
 
 
-def test_feasibility_add_custom_rule():
-    mem = FeasibilityMemory()
+class TestFeasibilityErrorHandling:
+    """Test error handling in feasibility checks."""
 
-    def block_yara_on_mnt(
-        cmd: list[str], evidence_refs: list[str], output_dir: str,
-    ) -> tuple[bool, str]:
-        if cmd[0] == "yara" and any(arg.startswith("/mnt/") for arg in cmd[1:]):
-            return False, "F999: yara scans on /mnt/ are not permitted"
-        return True, ""
+    def setup_method(self) -> None:
+        """Clear registry before each test."""
+        clear_feasibility_rules()
 
-    custom_rule = FeasibilityRule(
-        rule_id="F999",
-        description="Block yara on /mnt/",
-        check_fn=block_yara_on_mnt,
-    )
-    mem.add_rule(custom_rule)
+    def teardown_method(self) -> None:
+        """Clear registry after each test."""
+        clear_feasibility_rules()
 
-    rule_ids = {r.rule_id for r in mem.rules}
-    assert "F999" in rule_ids
+    def test_continues_on_rule_exception(self):
+        """If a rule raises, continue checking others."""
+        @register_feasibility_rule
+        def explode(case: dict) -> bool:
+            raise ValueError("boom")
 
-    cmd = ["yara", "rules.yar", "/mnt/evidence/disk.img"]
-    passed, violations = mem.check(cmd, ["/mnt/evidence/disk.img"], "/tmp/output")
-    assert passed is False
-    assert any("F999" in v for v in violations)
+        @register_feasibility_rule
+        def reject_all(case: dict) -> bool:
+            return False
 
-
-def test_feasibility_save_and_load_custom_rules(tmp_path: Path):
-    mem = FeasibilityMemory()
-
-    def custom_check(cmd: list[str], evidence_refs: list[str], output_dir: str) -> tuple[bool, str]:
-        return True, ""
-
-    mem.add_rule(FeasibilityRule(rule_id="F100", description="Custom rule", check_fn=custom_check))
-    save_path = tmp_path / "feasibility.json"
-    mem.save(save_path)
-
-    loaded = FeasibilityMemory.load(save_path)
-    # load restores default rules; custom rule metadata is preserved in file
-    # but check_fn cannot be serialised — so count should be >= default count
-    assert len(loaded.rules) > 0
-    # The saved file must be valid JSON
-    data = json.loads(save_path.read_text())
-    assert "rules" in data
-    # The custom rule metadata should be in the saved file
-    saved_ids = [r["rule_id"] for r in data["rules"]]
-    assert "F100" in saved_ids
+        # Should fail from reject_all, not because of explosion
+        is_feasible, reason = check_feasibility({"case_id": "test"})
+        assert is_feasible is False
+        assert "reject_all" in reason
