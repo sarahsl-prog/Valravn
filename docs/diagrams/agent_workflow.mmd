@@ -1,0 +1,68 @@
+%% Valravn Agent Workflow Diagram
+%% LangGraph-based DFIR investigation flow
+
+flowchart TD
+    subgraph Initialization["📋 Initialization"]
+        START([START])
+        INIT_STATE["Initialize AgentState<br/>• task: InvestigationTask<br/>• plan: InvestigationPlan<br/>• invocations: []<br/>• anomalies: []<br/>• skill_cache: {}"]
+    end
+
+    subgraph Planning["🔍 Planning Phase"]
+        PLAN["plan_investigation<br/>(LLM: Claude)"]
+        PLAN_DECISION{"Routes based on<br/>current_step_id"}
+    end
+
+    subgraph Execution["⚡ Execution Loop"]
+        LOAD_SKILL["load_skill<br/>Cache domain SKILL.md"]
+        ASSESS["assess_progress<br/>(Self-Assessment)"]
+        RUN_TOOL["run_forensic_tool<br/>• Execute SIFT tools<br/>• Retry with self-correction<br/>• Feasibility check"]
+        CHECK_ANOMALY["check_anomalies<br/>Detect patterns"]
+        RECORD_ANOMALY["record_anomaly<br/>Log anomaly data"]
+        UPDATE_PLAN["update_plan<br/>• Mark step status<br/>• Advance pointer<br/>• Add follow-ups"]
+    end
+
+    subgraph Conclusion["📝 Conclusion Phase"]
+        SYNTHESIZE["synthesize_conclusions<br/>Aggregate findings"]
+        WRITE_REPORT["write_findings_report<br/>Generate output"]
+        END([END])
+    end
+
+    %% Main Flow
+    START --> INIT_STATE --> PLAN
+
+    %% Planning branches
+    PLAN --> PLAN_DECISION
+    PLAN_DECISION -->|"step_id IS NULL"| SYNTHESIZE
+    PLAN_DECISION -->|"step_id exists"| LOAD_SKILL
+
+    %% Execution Loop
+    LOAD_SKILL --> ASSESS
+    ASSESS --> RUN_TOOL
+    RUN_TOOL --> CHECK_ANOMALY
+
+    %% Anomaly handling
+    CHECK_ANOMALY -->|"_pending_anomalies = true"| RECORD_ANOMALY
+    CHECK_ANOMALY -->|"no anomalies"| UPDATE_PLAN
+    RECORD_ANOMALY --> UPDATE_PLAN
+
+    %% Plan update routing
+    UPDATE_PLAN -->|"next_pending_step() exists"| LOAD_SKILL
+    UPDATE_PLAN -->|"no more steps"| SYNTHESIZE
+
+    %% Final phase
+    SYNTHESIZE --> WRITE_REPORT
+    WRITE_REPORT --> END
+
+    %% Styling
+    classDef startEnd fill:#2d3436,stroke:#00b894,stroke-width:3px,color:#fff
+    classDef plan fill:#0984e3,stroke:#74b9ff,stroke-width:2px,color:#fff
+    classDef execute fill:#e17055,stroke:#fab1a0,stroke-width:2px,color:#fff
+    classDef anomaly fill:#fdcb6e,stroke:#ffeaa7,stroke-width:2px,color:#2d3436
+    classDef conclude fill:#6c5ce7,stroke:#a29bfe,stroke-width:2px,color:#fff
+    classDef decision fill:#636e72,stroke:#b2bec3,stroke-width:2px,color:#fff
+
+    class START,END startEnd
+    class PLAN,PLAN_DECISION plan
+    class LOAD_SKILL,ASSESS,RUN_TOOL,CHECK_ANOMALY,UPDATE_PLAN execute
+    class RECORD_ANOMALY anomaly
+    class SYNTHESIZE,WRITE_REPORT conclude

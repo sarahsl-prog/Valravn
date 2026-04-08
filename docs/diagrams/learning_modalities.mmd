@@ -1,0 +1,92 @@
+%% Valravn Learning Modalities Diagram
+%% Four learning mechanisms integrated into the DFIR agent
+
+flowchart TB
+    subgraph Legend["📚 Learning Components Overview"]
+        direction LR
+        LG1["Reflective Comparison<br/>Learning"]
+        LG2["Self-Guidance"]
+        LG3["Replay-Based<br/>Reinforcement"]
+        LG4["Playbook<br/>Mutation"]
+    end
+
+    subgraph Core["🔄 Core RCL Training Loop"]
+        direction TB
+        INVESTIGATION_RESULT["Incoming Investigation Result<br/>• case_id<br/>• success_trace<br/>• failure_trace<br/>• success: bool"]
+
+        REFLECTION["🔍 Reflector (LLM)<br/>Compare success vs failure<br/><br/>Attribution Types:<br/>• actionable_gap<br/>• execution_variance<br/>• intractable"]
+
+        REFLECTION_DIAG["/ReflectionDiagnostic/<br/>• attribution<br/>• root_cause<br/>• coverage_gap"]
+
+        MUTATION["✏️ Mutator (LLM)<br/>Generate playbook edits<br/><br/>Operations:<br/>• ADD<br/>• UPDATE<br/>• DELETE<br/>• NOOP"]
+
+        OPTIMIZER["🧠 OptimizerState<br/>Tracks version history"]
+    end
+
+    subgraph SelfGuidance["📊 Self-Guidance System"]
+        direction TB
+        ASSESSOR["Progress Assessor (LLM)<br/>Evaluate investigation progress"]
+
+        SIGNAL["SelfGuidanceSignal<br/>• assessment (text)<br/>• polarity (+/-/0)<br/>• scalar_reward"]
+
+        TRUST["Trust Schedule<br/>4-phase coefficient:<br/>0%→20%→40%→80%→100%<br/>0.0 → ramp → 1.0 → 0.0"]
+
+        GUIDANCE_APPLY["Applied during execution<br/>at assess_progress node"]
+    end
+
+    subgraph ReplayBuffer["🗂️ Replay Buffer"]
+        direction TB
+        BUFFER["ReplayBuffer<br/><br/>Tracks difficult cases<br/>• n_pass = 3<br/>• n_reject = 2<br/>• buffer: {case_id → stats}"]
+
+        ADD["add_failure()<br/>Initialize case on first fail"]
+
+        RECORD["record_outcome()<br/>• On success: pass++<br/>• On fail: fail++<br/>• Graduate at threshold"]
+
+        SAMPLE["sample(n)<br/>Retrieve cases<br/>for retraining"]
+    end
+
+    subgraph Playbook["📖 Security Playbook"]
+        direction TB
+        PB["SecurityPlaybook<br/>• entries: {id → rule}<br/>• version: int"]
+
+        RULES["DFIR Rules<br/>(kebab-case IDs)<br/>• rule-hash-verify<br/>• analyze-vol3-pslist<br/>• etc."]
+
+        PROMPT_SECTION["to_prompt_section()<br/>Convert to LLM context"]
+    end
+
+    %% Connections - RCL Loop
+    INVESTIGATION_RESULT -->|"both traces present"| REFLECTION
+    REFLECTION --> REFLECTION_DIAG
+    REFLECTION_DIAG -->|"attribution == actionable_gap"| MUTATION
+    MUTATION -->|"ADD/UPDATE/DELETE"| PB
+    MUTATION -->|"record_change()"| OPTIMIZER
+
+    %% Connections - Self-Guidance
+    ASSESSOR --> SIGNAL
+    SIGNAL --> TRUST
+    TRUST --> GUIDANCE_APPLY
+
+    %% Connections - Replay Buffer
+    INVESTIGATION_RESULT -->|"success == false"| ADD
+    ADD --> BUFFER
+    BUFFER --> RECORD
+    RECORD -->|"fails >= n_reject<br/>OR passes >= n_pass"| SAMPLE
+
+    %% Cross-component links
+    PB -->|"provides context"| REFLECTION
+    OPTIMIZER -->|"tracks"| PB
+
+    %% Styling
+    classDef core fill:#e17055,stroke:#fab1a0,stroke-width:2px,color:#fff
+    classDef self fill:#0984e3,stroke:#74b9ff,stroke-width:2px,color:#fff
+    classDef replay fill:#00b894,stroke:#55efc4,stroke-width:2px,color:#fff
+    classDef book fill:#6c5ce7,stroke:#a29bfe,stroke-width:2px,color:#fff
+    classDef data fill:#636e72,stroke:#b2bec3,stroke-width:1px,color:#fff
+    classDef input fill:#fdcb6e,stroke:#ffeaa7,stroke-width:2px,color:#2d3436
+
+    class REFLECTION,MUTATION core
+    class ASSESSOR,TRUST,GUIDANCE_APPLY self
+    class BUFFER,ADD,RECORD,SAMPLE replay
+    class PB,RULES,PROMPT_SECTION book
+    class REFLECTION_DIAG,SIGNAL data
+    class INVESTIGATION_RESULT input
