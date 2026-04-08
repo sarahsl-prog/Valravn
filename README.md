@@ -35,10 +35,16 @@ cd Valravn
 # Activate the virtual environment (pre-initialised in repo root)
 source .venv/bin/activate
 
-# Install the package with development dependencies
-pip install -e ".[dev]"
+# Install with your chosen LLM provider(s):
+pip install -e ".[anthropic]"          # Claude only (default)
+pip install -e ".[openai]"             # OpenAI only
+pip install -e ".[ollama]"             # Ollama only
+pip install -e ".[all]"                # All providers
 
-# Export your Anthropic API key
+# Add dev tools alongside a provider:
+pip install -e ".[anthropic,dev]"
+
+# Export your Anthropic API key (or see Configuration below for other providers)
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
@@ -132,7 +138,6 @@ export OLLAMA_BASE_URL=http://localhost:11434
 
 # OpenRouter
 export OPENROUTER_API_KEY=sk-or-...
-export OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 
 # Per-module model override
 export VALRAVN_PLAN_MODEL=openai:gpt-4o
