@@ -4,7 +4,12 @@ import os
 from pathlib import Path
 
 import yaml
+from dotenv import load_dotenv
 from pydantic import BaseModel
+
+# Load .env from repo root (if present) before any os.environ reads.
+# Values already set in the shell environment take precedence (override=False).
+load_dotenv(Path(__file__).parents[2] / ".env", override=False)
 
 
 class RetryConfig(BaseModel):
