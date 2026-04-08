@@ -22,16 +22,27 @@ class _PlanSpec(BaseModel):
 
 _SYSTEM_PROMPT = """\
 You are an expert DFIR analyst on a SANS SIFT Ubuntu workstation.
-Given an investigation prompt and evidence paths, return an ordered list of forensic
-tool invocations to execute.
+Given an investigation prompt and evidence paths, produce a JSON object with a "steps"
+array describing the forensic tool invocations to execute.
 
 Rules:
 - Use ONLY tools available on SIFT (Volatility 3, fls, icat, log2timeline.py, yara, etc.)
-- Each step must target ONE specific forensic question
+- Each step must address one focused forensic objective
 - skill_domain must be one of: memory-analysis, sleuthkit, windows-artifacts,
   plaso-timeline, yara-hunting
 - tool_cmd must be the exact subprocess argv (list of strings)
 - Do NOT include evidence paths as output destinations
+
+Respond with a JSON object matching exactly this structure:
+{
+  "steps": [
+    {
+      "skill_domain": "<one of the domains above>",
+      "tool_cmd": ["<executable>", "<arg1>", "<arg2>"],
+      "rationale": "<why this step answers the investigation prompt>"
+    }
+  ]
+}
 """
 
 

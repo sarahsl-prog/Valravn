@@ -101,8 +101,12 @@ def get_llm(
             f"Supported: anthropic, openai, ollama, openrouter"
         )
 
-    # Wrap with structured output if schema provided
+    # Wrap with structured output if schema provided.
+    # Ollama models often lack native tool-calling support, so use json_mode
+    # (prompt-based JSON extraction) rather than the default function-calling path.
     if output_schema is not None:
+        if provider == "ollama":
+            return llm.with_structured_output(output_schema, method="json_mode")
         return llm.with_structured_output(output_schema)
 
     return llm
