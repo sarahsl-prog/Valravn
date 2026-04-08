@@ -89,16 +89,33 @@ class FeasibilityMemory:
             return False, f"Command includes destructive operation"
         return True, ""
     
+    # Commands that can write to or destroy a path when it is their target.
+    _DESTRUCTIVE_CMDS: frozenset[str] = frozenset({
+        "rm", "rmdir", "del", "remove", "delete", "destroy",
+        "overwrite", "shred", "wipe", "truncate",
+        "mv", "move", "cp", "copy",  # could overwrite evidence
+        "dd", "tee",                 # classic evidence-clobbering tools
+    })
+
     def _check_evidence_protection(self, cmd: list[str], evidence_refs: str) -> tuple[bool, str]:
-        """Check evidence paths are protected from modification."""
-        if not evidence_refs:
+        """Check that destructive commands do not target evidence paths.
+
+        Read-only forensic tools (fls, icat, vol.py, log2timeline.py …) are
+        expected to receive the evidence path as an input argument and are
+        explicitly allowed through.  Only commands in _DESTRUCTIVE_CMDS are
+        checked.
+        """
+        if not cmd or not evidence_refs:
+            return True, ""
+        executable = Path(cmd[0]).name  # strip directory prefix if present
+        if executable not in self._DESTRUCTIVE_CMDS:
             return True, ""
         evidence_list = evidence_refs.split(",") if isinstance(evidence_refs, str) else []
         for arg in cmd:
             for ev_path in evidence_list:
                 ev_path = ev_path.strip()
                 if ev_path and arg.startswith(ev_path):
-                    return False, f"Command references evidence path {ev_path}"
+                    return False, f"Destructive command '{executable}' targets evidence path {ev_path}"
         return True, ""
     
     def _check_valid_command(self, cmd: list[str], evidence_refs: str) -> tuple[bool, str]:
