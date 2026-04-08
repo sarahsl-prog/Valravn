@@ -110,12 +110,12 @@ mlflow:
 
 # Multi-provider LLM configuration (per-module model selection)
 models:
-  plan: anthropic:claude-3-5-sonnet-20241022
-  reflector: anthropic:claude-3-5-sonnet-20241022
-  mutator: anthropic:claude-3-5-sonnet-20241022
-  anomaly: anthropic:claude-3-5-sonnet-20241022
-  conclusions: anthropic:claude-3-5-sonnet-20241022
-  tool_runner: anthropic:claude-3-5-sonnet-20241022
+  plan: anthropic:claude-sonnet-4-6
+  reflector: anthropic:claude-sonnet-4-6
+  mutator: anthropic:claude-sonnet-4-6
+  anomaly: anthropic:claude-sonnet-4-6
+  conclusions: anthropic:claude-sonnet-4-6
+  tool_runner: anthropic:claude-sonnet-4-6
 ```
 
 Override retry limit at runtime without editing the file:

@@ -7,7 +7,7 @@ Supports:
 - openrouter: Any model via OpenRouter's OpenAI-compatible API
 
 Usage:
-    llm = get_llm("anthropic:claude-3-5-sonnet-20241022")
+    llm = get_llm("anthropic:claude-sonnet-4-6")
     structured_llm = get_llm("openai:gpt-4o", output_schema=MySchema)
 """
 
@@ -24,13 +24,13 @@ _LOGGER = logging.getLogger(__name__)
 
 # Default model configurations per module
 DEFAULT_MODELS = {
-    "anomaly": "anthropic:claude-3-5-sonnet-20241022",
-    "conclusions": "anthropic:claude-3-5-sonnet-20241022",
-    "plan": "anthropic:claude-3-5-sonnet-20241022",
-    "self_assess": "anthropic:claude-3-5-sonnet-20241022",
-    "tool_runner": "anthropic:claude-3-5-sonnet-20241022",
-    "reflector": "anthropic:claude-3-5-sonnet-20241022",
-    "mutator": "anthropic:claude-3-5-sonnet-20241022",
+    "anomaly": "anthropic:claude-sonnet-4-6",
+    "conclusions": "anthropic:claude-sonnet-4-6",
+    "plan": "anthropic:claude-sonnet-4-6",
+    "self_assess": "anthropic:claude-sonnet-4-6",
+    "tool_runner": "anthropic:claude-sonnet-4-6",
+    "reflector": "anthropic:claude-sonnet-4-6",
+    "mutator": "anthropic:claude-sonnet-4-6",
 }
 
 
@@ -57,7 +57,7 @@ def get_llm(
         ImportError: If provider package not installed.
 
     Examples:
-        >>> llm = get_llm("anthropic:claude-3-5-sonnet-20241022")
+        >>> llm = get_llm("anthropic:claude-sonnet-4-6")
         >>> llm = get_llm("openai:gpt-4o", temperature=0.7)
         >>> llm = get_llm("ollama:llama3.2", output_schema=MySchema)
         >>> llm = get_llm("openrouter:anthropic/claude-3-opus")
@@ -206,4 +206,4 @@ def get_default_model(module: str) -> str:
         Provider:model string or env var override.
     """
     env_var = f"VALRAVN_{module.upper()}_MODEL"
-    return os.getenv(env_var, DEFAULT_MODELS.get(module, "anthropic:claude-3-5-sonnet-20241022"))
+    return os.getenv(env_var, DEFAULT_MODELS.get(module, "anthropic:claude-sonnet-4-6"))
