@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
-import logging
 import random
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_LOGGER = logging.getLogger(__name__)
+from loguru import logger
 
 
 class ReplayBuffer:
@@ -87,7 +86,7 @@ class ReplayBuffer:
                 f.write(json.dumps(archive_record) + "\n")
             self.archived_count += 1
         except (IOError, OSError) as e:
-            _LOGGER.error(
+            logger.error(
                 "Failed to archive rejected case %r to %r: %s",
                 case_id,
                 self.archive_path,

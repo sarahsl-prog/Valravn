@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 
+from loguru import logger
 from valravn.training.feasibility import check_feasibility
 from valravn.training.mutator import apply_mutation
 from valravn.training.optimizer_state import OptimizerState
 from valravn.training.playbook import SecurityPlaybook
 from valravn.training.reflector import ReflectionDiagnostic, reflect_on_trajectory
 from valravn.training.replay_buffer import ReplayBuffer
-
-_LOGGER = logging.getLogger(__name__)
 
 _ITERATION_FILE = "iteration.json"
 
@@ -102,7 +100,7 @@ class RCLTrainer:
                 # Always record the failure outcome, not just on subsequent failures
                 self.replay_buffer.record_outcome(case_id, success=False)
             else:
-                _LOGGER.info(
+                logger.info(
                     "Case %r rejected by feasibility rules: %s",
                     case_id,
                     rejection_reason

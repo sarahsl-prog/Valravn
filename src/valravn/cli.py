@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
+from loguru import logger
 from pydantic import ValidationError
 
 from valravn.config import OutputConfig, load_config
@@ -37,7 +39,17 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _configure_logging() -> None:
+    """Configure loguru from LOG_LEVEL env var (set in .env or shell)."""
+    level = os.getenv("LOG_LEVEL", "WARNING").upper()
+    logger.remove()  # remove default stderr sink
+    logger.add(sys.stderr, level=level, colorize=True,
+               format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | "
+                      "<cyan>{name}</cyan> - <level>{message}</level>")
+
+
 def main() -> None:
+    _configure_logging()
     args = build_parser().parse_args()
 
     if args.command == "investigate":

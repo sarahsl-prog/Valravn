@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import logging
 import os
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, field_validator
 
 import mlflow
+
+from loguru import logger
 
 from valravn.core.llm_factory import get_llm
 
@@ -30,8 +31,6 @@ For each analysis provide:
   - coverage_gap : (only for actionable_gap) a brief description of the missing or incorrect
                    playbook rule; leave empty for the other attribution types
 """
-
-_LOGGER = logging.getLogger(__name__)
 
 _ALLOWED_ATTRIBUTIONS = {"actionable_gap", "execution_variance", "intractable"}
 
@@ -62,7 +61,7 @@ class ReflectionDiagnostic(BaseModel):
 
 def _log_invalid_attribution(raw: str, cleaned: str) -> None:
     """Log warning and increment MLflow metric for invalid attributions."""
-    _LOGGER.warning(
+    logger.warning(
         "Invalid attribution received from reflector LLM: raw=%r, cleaned=%r",
         raw,
         cleaned,

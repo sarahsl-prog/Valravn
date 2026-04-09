@@ -22,12 +22,11 @@ Also includes FeasibilityMemory class for command safety validation:
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-_LOGGER = logging.getLogger(__name__)
+from loguru import logger
 
 # Registry for replay buffer feasibility rules
 _custom_feasibility_rules: list[Callable[[dict[str, Any]], bool]] = []
@@ -146,7 +145,7 @@ class FeasibilityMemory:
                 if not result:
                     violations.append(f"[{rule.rule_id}] {rule.description}: {msg}")
             except Exception as e:
-                _LOGGER.warning("Feasibility rule %r raised exception: %s", rule.rule_id, e)
+                logger.warning("Feasibility rule %r raised exception: %s", rule.rule_id, e)
         
         return len(violations) == 0, violations
     
@@ -191,7 +190,7 @@ def register_feasibility_rule(
         The registered function (for use as decorator).
     """
     _custom_feasibility_rules.append(func)
-    _LOGGER.debug("Registered custom feasibility rule: %s", func.__name__)
+    logger.debug("Registered custom feasibility rule: %s", func.__name__)
     return func
 
 
@@ -205,13 +204,13 @@ def unregister_feasibility_rule(
     """
     if func in _custom_feasibility_rules:
         _custom_feasibility_rules.remove(func)
-        _LOGGER.debug("Unregistered custom feasibility rule: %s", func.__name__)
+        logger.debug("Unregistered custom feasibility rule: %s", func.__name__)
 
 
 def clear_feasibility_rules() -> None:
     """Clear all custom feasibility rules."""
     _custom_feasibility_rules.clear()
-    _LOGGER.debug("Cleared all custom feasibility rules")
+    logger.debug("Cleared all custom feasibility rules")
 
 
 def check_feasibility(case: dict[str, Any]) -> tuple[bool, str]:
@@ -235,10 +234,10 @@ def check_feasibility(case: dict[str, Any]) -> tuple[bool, str]:
             result = rule(case)
             if not result:
                 reason = f"Feasibility rule '{rule.__name__}' rejected case"
-                _LOGGER.debug(reason)
+                logger.debug(reason)
                 return False, reason
         except Exception as e:
-            _LOGGER.error("Feasibility rule '%s' raised exception: %s", rule.__name__, e)
+            logger.error("Feasibility rule '%s' raised exception: %s", rule.__name__, e)
             # Continue checking other rules
             continue
 

@@ -13,14 +13,13 @@ Usage:
 
 from __future__ import annotations
 
-import logging
 import os
 from typing import TYPE_CHECKING
 
+from loguru import logger
+
 if TYPE_CHECKING:
     from pydantic import BaseModel
-
-_LOGGER = logging.getLogger(__name__)
 
 # Default model configurations per module
 DEFAULT_MODELS = {
@@ -84,7 +83,7 @@ def get_llm(
     provider = provider.lower().strip()
     model = model.strip()
 
-    _LOGGER.debug("Initializing %s LLM with model %s", provider, model)
+    logger.debug("Initializing %s LLM with model %s", provider, model)
 
     # Create LLM based on provider
     if provider == "anthropic":
@@ -124,7 +123,7 @@ def _create_anthropic_llm(model: str, temperature: float) -> object:
 
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
-        _LOGGER.warning("ANTHROPIC_API_KEY not set")
+        logger.warning("ANTHROPIC_API_KEY not set")
 
     return ChatAnthropic(
         model=model,
@@ -145,7 +144,7 @@ def _create_openai_llm(model: str, temperature: float) -> object:
 
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        _LOGGER.warning("OPENAI_API_KEY not set")
+        logger.warning("OPENAI_API_KEY not set")
 
     return ChatOpenAI(
         model=model,
@@ -185,7 +184,7 @@ def _create_openrouter_llm(model: str, temperature: float) -> object:
 
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
-        _LOGGER.warning("OPENROUTER_API_KEY not set")
+        logger.warning("OPENROUTER_API_KEY not set")
 
     # OpenRouter uses OpenAI-compatible endpoint
     return ChatOpenAI(

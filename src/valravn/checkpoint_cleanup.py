@@ -6,15 +6,13 @@ retention policies and manual cleanup utilities.
 
 from __future__ import annotations
 
-import logging
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 
+from loguru import logger
 from langgraph.checkpoint.sqlite import SqliteSaver
-
-_LOGGER = logging.getLogger(__name__)
 
 # Default retention policy - keep last 7 days
 DEFAULT_RETENTION_DAYS = 7
@@ -116,7 +114,7 @@ class CheckpointCleanupPolicy:
                 
                 if count < self.min_checkpoints_per_thread:
                     # Restore from deleted or log warning
-                    _LOGGER.warning(
+                    logger.warning(
                         "Thread %r has only %d checkpoints (min: %d)",
                         thread_id, count, self.min_checkpoints_per_thread
                     )
@@ -124,7 +122,7 @@ class CheckpointCleanupPolicy:
             conn.commit()
         
         stats["total_deleted"] = stats["deleted_by_age"] + stats["deleted_by_count"]
-        _LOGGER.info(
+        logger.info(
             "Checkpoint cleanup complete: %d deleted (%d by age, %d by count)",
             stats["total_deleted"],
             stats["deleted_by_age"],
@@ -210,4 +208,4 @@ def vacuum_db(db_path: Path) -> None:
     with sqlite3.connect(db_path) as conn:
         conn.execute("VACUUM")
     
-    _LOGGER.info("Vacuumed checkpoint database: %s", db_path)
+    logger.info("Vacuumed checkpoint database: %s", db_path)
