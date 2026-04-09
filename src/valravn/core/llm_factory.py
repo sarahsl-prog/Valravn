@@ -23,13 +23,13 @@ if TYPE_CHECKING:
 
 # Default model configurations per module
 DEFAULT_MODELS = {
-    "anomaly": "anthropic:claude-sonnet-4-6",
-    "conclusions": "anthropic:claude-sonnet-4-6",
-    "plan": "anthropic:claude-sonnet-4-6",
-    "self_assess": "anthropic:claude-sonnet-4-6",
-    "tool_runner": "anthropic:claude-sonnet-4-6",
-    "reflector": "anthropic:claude-sonnet-4-6",
-    "mutator": "anthropic:claude-sonnet-4-6",
+    "anomaly": "ollama:minimax-m2.5:cloud",
+    "conclusions": "ollama:minimax-m2.5:cloud",
+    "plan": "ollama:minimax-m2.5:cloud",
+    "self_assess": "ollama:minimax-m2.5:cloud",
+    "tool_runner": "ollama:minimax-m2.5:cloud",
+    "reflector": "ollama:minimax-m2.5:cloud",
+    "mutator": "ollama:minimax-m2.5:cloud",
 }
 
 
@@ -91,7 +91,11 @@ def get_llm(
     elif provider == "openai":
         llm = _create_openai_llm(model, temperature)
     elif provider == "ollama":
-        llm = _create_ollama_llm(model, temperature)
+        # Pass format="json" at the ChatOllama level when structured output is needed.
+        # Some Ollama models ignore json_mode prompting and return markdown; enforcing
+        # format at the API level guarantees valid JSON output.
+        ollama_format = "json" if output_schema is not None else None
+        llm = _create_ollama_llm(model, temperature, format=ollama_format)
     elif provider == "openrouter":
         llm = _create_openrouter_llm(model, temperature)
     else:
@@ -153,7 +157,7 @@ def _create_openai_llm(model: str, temperature: float) -> object:
     )
 
 
-def _create_ollama_llm(model: str, temperature: float) -> object:
+def _create_ollama_llm(model: str, temperature: float, format: str | None = None) -> object:
     """Create Ollama local LLM."""
     try:
         from langchain_ollama import ChatOllama
@@ -165,11 +169,11 @@ def _create_ollama_llm(model: str, temperature: float) -> object:
 
     base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
-    return ChatOllama(
-        model=model,
-        temperature=temperature,
-        base_url=base_url,
-    )
+    kwargs: dict = {"model": model, "temperature": temperature, "base_url": base_url}
+    if format is not None:
+        kwargs["format"] = format
+
+    return ChatOllama(**kwargs)
 
 
 def _create_openrouter_llm(model: str, temperature: float) -> object:
