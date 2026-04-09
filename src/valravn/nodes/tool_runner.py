@@ -32,6 +32,8 @@ Key tool syntax rules:
 
 log2timeline.py (Plaso 20240308):
   ALL flags must come before the source path. Source path is the LAST argument.
+  ONLY use flags from `log2timeline.py --help`. Do NOT invent flags.
+  Non-existent flags (will error): --log2timeline-mode, --mode, --output, --format, --output-format
   CORRECT: log2timeline.py --storage-file ./analysis/out.plaso --parsers win10 --timezone UTC /mnt/ewf/ewf1
   WRONG:   log2timeline.py /mnt/ewf/ewf1 --storage-file ./analysis/out.plaso
 
