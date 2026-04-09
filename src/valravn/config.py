@@ -52,6 +52,7 @@ class AppConfig(BaseModel):
         "tracking_uri": "http://127.0.0.1:5000",
         "experiment_name": "valravn-evaluation",
     }
+    models: dict[str, str] = {}
 
 
 def load_config(path: Path | None) -> AppConfig:
@@ -65,5 +66,12 @@ def load_config(path: Path | None) -> AppConfig:
     env_max = os.environ.get("VALRAVN_MAX_RETRIES")
     if env_max:
         cfg.retry.max_attempts = int(env_max)
+
+    # Inject models from config.yaml into env vars so llm_factory.py picks them up.
+    # Env vars already set (from .env or shell) take precedence.
+    for module, provider_model in cfg.models.items():
+        env_key = f"VALRAVN_{module.upper()}_MODEL"
+        if env_key not in os.environ:
+            os.environ[env_key] = provider_model
 
     return cfg
