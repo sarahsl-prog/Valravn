@@ -2,6 +2,12 @@
 
 ## Development Setup
 
+### Prerequisites
+
+For full integration testing, you'll need the SIFT forensic tools. See the [Tool Installation](#tool-installation) section below for details on installing tools on non-SIFT systems.
+
+### Setup
+
 ```bash
 git clone https://github.com/sarahsl-prog/Valravn.git
 cd Valravn
@@ -14,12 +20,49 @@ pip install -e ".[dev]"
 
 # Verify the install
 valravn --help
+
+# Check tool availability (for integration tests)
+valravn check-tools
 ```
 
 Required environment variable:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+---
+
+## Tool Installation
+
+Valravn is designed for the SANS SIFT Workstation. To run integration tests on a standard Ubuntu system, install these tools:
+
+### Sleuth Kit
+```bash
+sudo apt install sleuthkit
+```
+
+### Volatility 3
+```bash
+sudo mkdir -p /opt/volatility3-2.20.0
+# Download from https://github.com/volatilityfoundation/volatility3/releases
+# Extract and ensure vol.py is at /opt/volatility3-2.20.0/vol.py
+```
+
+### Plaso
+```bash
+sudo add-apt-repository ppa:gift/stable
+sudo apt install python3-plaso plaso-tools python3-pytsk3
+```
+
+### YARA
+```bash
+sudo apt install yara
+```
+
+### EWF Tools
+```bash
+sudo apt install ewf-tools
 ```
 
 ---

@@ -27,6 +27,46 @@ No LangSmith, no external telemetry. All tracing and evaluation artifacts are st
 
 ## Installation
 
+### Prerequisites
+
+Valravn requires forensic tools from the SANS SIFT Workstation. If running on a standard Ubuntu system, install the tools:
+
+**Sleuth Kit (file system analysis):**
+```bash
+sudo apt install sleuthkit
+```
+
+**Volatility 3 (memory forensics):**
+```bash
+# Download from https://github.com/volatilityfoundation/volatility3/releases
+# or clone the repository
+sudo mkdir -p /opt/volatility3-2.20.0
+sudo pip install volatility3  # or download release tarball
+# Create symlink if needed: sudo ln -s /path/to/vol.py /opt/volatility3-2.20.0/vol.py
+```
+
+**Plaso (timeline analysis):**
+```bash
+sudo add-apt-repository ppa:gift/stable
+sudo apt install python3-plaso plaso-tools python3-pytsk3
+```
+
+**YARA (pattern matching):**
+```bash
+sudo apt install yara
+# or from source for latest version
+```
+
+**EZ Tools (Windows artifacts):**
+Download from https://ericzimmerman.github.io/ and install to `/opt/zimmermantools/`
+
+**EWF tools (E01 image support):**
+```bash
+sudo apt install ewf-tools
+```
+
+### Valravn Installation
+
 ```bash
 # Clone the repository
 git clone https://github.com/sarahsl-prog/Valravn.git
@@ -46,6 +86,16 @@ pip install -e ".[anthropic,dev]"
 
 # Export your Anthropic API key (or see Configuration below for other providers)
 export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### Verify Tool Installation
+
+```bash
+# Check that all required forensic tools are available
+valravn check-tools
+
+# Detailed report with paths
+valravn check-tools --verbose
 ```
 
 ---
