@@ -24,6 +24,22 @@ def _get_correction_llm():
     return get_llm(module="tool_runner", output_schema=_CorrectionSpec)
 
 
+_CORRECTION_CONTEXT = """\
+You are correcting a forensic tool command on a SANS SIFT Ubuntu workstation.
+Key tool syntax rules:
+
+log2timeline.py (Plaso 20240308):
+  ALL flags must come before the source path. Source path is the LAST argument.
+  CORRECT: log2timeline.py --storage-file ./analysis/out.plaso --parsers win10 --timezone UTC /mnt/ewf/ewf1
+  WRONG:   log2timeline.py /mnt/ewf/ewf1 --storage-file ./analysis/out.plaso
+
+fls: fls [-r] [-m /] <image_or_device>
+icat: icat <image_or_device> <inode>
+vol.py: python3 /opt/volatility3-2.20.0/vol.py -f <image> <plugin>
+yara: /usr/local/bin/yara [-r] <rules.yar> <target>
+"""
+
+
 def _request_correction(
     step_id: str,
     attempt_number: int,
@@ -32,6 +48,7 @@ def _request_correction(
     stderr: str,
 ) -> _CorrectionSpec:
     prompt = (
+        f"{_CORRECTION_CONTEXT}\n"
         f"A forensic tool invocation failed on attempt {attempt_number}.\n\n"
         f"Original command: {original_cmd}\n"
         f"Exit code: {exit_code}\n"

@@ -33,6 +33,25 @@ Rules:
 - tool_cmd must be the exact subprocess argv (list of strings)
 - Do NOT include evidence paths as output destinations
 
+CRITICAL TOOL SYNTAX — follow exactly:
+
+log2timeline.py (Plaso 20240308, GIFT PPA):
+  Flags MUST come before the source path. Source path is the LAST argument.
+  CORRECT:   ["log2timeline.py", "--storage-file", "./analysis/case.plaso", "--parsers", "win10", "--timezone", "UTC", "/mnt/ewf/ewf1"]
+  WRONG:     ["log2timeline.py", "/mnt/ewf/ewf1", "--storage-file", "./analysis/case.plaso"]
+
+fls (Sleuth Kit):
+  CORRECT:   ["fls", "-r", "-m", "/", "/mnt/ewf/ewf1"]
+
+icat (Sleuth Kit):
+  CORRECT:   ["icat", "/mnt/ewf/ewf1", "<inode>"]
+
+vol.py (Volatility 3):
+  CORRECT:   ["python3", "/opt/volatility3-2.20.0/vol.py", "-f", "<memory_image>", "windows.pslist.PsList"]
+
+yara:
+  CORRECT:   ["/usr/local/bin/yara", "-r", "<rules.yar>", "<target_path>"]
+
 Respond with a JSON object matching exactly this structure:
 {
   "steps": [
