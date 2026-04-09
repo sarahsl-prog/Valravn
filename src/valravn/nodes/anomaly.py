@@ -8,6 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
 from valravn.core.llm_factory import get_llm
+from valravn.core.parsing import parse_llm_json
 
 from valravn.models.records import Anomaly, AnomalyResponseAction
 from valravn.models.task import PlannedStep, StepStatus
@@ -21,13 +22,15 @@ Analyse the tool output below for anomalies in these categories:
   4. unexpected_absence       — expected artifacts are entirely missing from output
   5. integrity_failure        — hash mismatches, corrupted records, or truncated data
 
-Return structured output indicating whether an anomaly was detected and, if so, a
-concise description, its forensic significance, and which category applies.
-
-Also determine the appropriate response action:
-  - added_follow_up_steps    — anomaly warrants deeper investigation with additional tool runs
-  - no_follow_up_warranted   — anomaly is noted but does not require further action
-  - investigation_cannot_proceed — anomaly is so severe that the investigation cannot continue
+Respond with valid JSON only — no markdown, no prose outside the JSON object.
+Output exactly this structure:
+{
+  "anomaly_detected": <true|false>,
+  "description": "<concise description, or empty string>",
+  "forensic_significance": "<significance, or empty string>",
+  "category": "<one of the 5 categories above, or empty string>",
+  "response_action": "<added_follow_up_steps|no_follow_up_warranted|investigation_cannot_proceed>"
+}
 """
 
 
@@ -64,8 +67,8 @@ _FOLLOW_UP_COMMANDS: dict[str, dict] = {
 
 
 def _get_anomaly_llm():
-    """Get LLM for anomaly detection with structured output."""
-    return get_llm(module="anomaly", output_schema=_AnomalyCheckResult)
+    """Get LLM for anomaly detection."""
+    return get_llm(module="anomaly")
 
 
 def check_anomalies(state: dict) -> dict:
@@ -91,7 +94,8 @@ def check_anomalies(state: dict) -> dict:
         ),
     ]
 
-    result: _AnomalyCheckResult = _get_anomaly_llm().invoke(messages)
+    response = _get_anomaly_llm().invoke(messages)
+    result: _AnomalyCheckResult = parse_llm_json(response.content, _AnomalyCheckResult)
 
     if result.anomaly_detected:
         return {

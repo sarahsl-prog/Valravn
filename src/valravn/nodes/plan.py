@@ -7,6 +7,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from valravn.core.llm_factory import get_llm
+from valravn.core.parsing import parse_llm_json
 
 from valravn.models.task import InvestigationPlan, PlannedStep, StepStatus
 
@@ -69,8 +70,8 @@ Respond with a JSON object matching exactly this structure:
 
 
 def _get_llm():
-    """Get LLM for investigation planning with structured output."""
-    return get_llm(module="plan", output_schema=_PlanSpec)
+    """Get LLM for investigation planning."""
+    return get_llm(module="plan")
 
 
 def plan_investigation(state: dict) -> dict:
@@ -94,7 +95,8 @@ def plan_investigation(state: dict) -> dict:
         ),
     ]
 
-    plan_spec: _PlanSpec = _get_llm().invoke(messages)
+    response = _get_llm().invoke(messages)
+    plan_spec: _PlanSpec = parse_llm_json(response.content, _PlanSpec)
 
     steps = [
         PlannedStep(

@@ -1,4 +1,5 @@
 # Re-import subprocess for timeout test
+import json
 import subprocess
 from datetime import timezone
 from pathlib import Path
@@ -129,7 +130,7 @@ def test_retry_on_failure_succeeds_second_attempt(read_only_evidence, output_dir
 
     correction = _CorrectionSpec(corrected_cmd=["fixed", "cmd"], rationale="fixed the flag")
     mock_llm = MagicMock()
-    mock_llm.invoke.return_value = correction
+    mock_llm.invoke.return_value = MagicMock(content=json.dumps(correction.model_dump()))
 
     with patch("subprocess.run", side_effect=[fail_proc, ok_proc]), \
          patch("valravn.nodes.tool_runner._get_correction_llm", return_value=mock_llm):
@@ -150,7 +151,7 @@ def test_exhaustion_creates_tool_failure_record(read_only_evidence, output_dir):
     fail_proc = _make_proc(returncode=1, stdout="", stderr="error")
     correction = _CorrectionSpec(corrected_cmd=["still", "broken"], rationale="attempt fix")
     mock_llm = MagicMock()
-    mock_llm.invoke.return_value = correction
+    mock_llm.invoke.return_value = MagicMock(content=json.dumps(correction.model_dump()))
 
     with patch("subprocess.run", return_value=fail_proc), \
          patch("valravn.nodes.tool_runner._get_correction_llm", return_value=mock_llm):
@@ -180,7 +181,7 @@ def test_self_correction_event_fields(read_only_evidence, output_dir):
 
     correction = _CorrectionSpec(corrected_cmd=corrected_cmd, rationale=rationale)
     mock_llm = MagicMock()
-    mock_llm.invoke.return_value = correction
+    mock_llm.invoke.return_value = MagicMock(content=json.dumps(correction.model_dump()))
 
     with patch("subprocess.run", side_effect=[fail_proc, ok_proc]), \
          patch("valravn.nodes.tool_runner._get_correction_llm", return_value=mock_llm):
@@ -201,7 +202,7 @@ def test_exhaustion_exit_code_one(read_only_evidence, output_dir):
     fail_proc = _make_proc(returncode=2, stdout="", stderr="fatal error")
     correction = _CorrectionSpec(corrected_cmd=["retry", "cmd"], rationale="trying again")
     mock_llm = MagicMock()
-    mock_llm.invoke.return_value = correction
+    mock_llm.invoke.return_value = MagicMock(content=json.dumps(correction.model_dump()))
 
     with patch("subprocess.run", return_value=fail_proc), \
          patch("valravn.nodes.tool_runner._get_correction_llm", return_value=mock_llm):

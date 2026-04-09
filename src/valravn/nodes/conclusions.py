@@ -7,6 +7,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
 from valravn.core.llm_factory import get_llm
+from valravn.core.parsing import parse_llm_json
 
 _SYSTEM_PROMPT = """\
 You are an expert DFIR analyst. Given the investigation prompt, tool invocation outputs,
@@ -20,6 +21,18 @@ Each conclusion must:
 
 If the evidence is insufficient for any conclusions, return an empty list.
 Do NOT speculate beyond what the evidence supports.
+
+Respond with valid JSON only — no markdown, no prose outside the JSON object.
+Output exactly this structure:
+{
+  "conclusions": [
+    {
+      "statement": "<specific, falsifiable finding>",
+      "supporting_invocation_ids": ["<id1>", "<id2>"],
+      "confidence": "<high|medium|low>"
+    }
+  ]
+}
 """
 
 MAX_STDOUT_CHARS = 10_000
@@ -36,8 +49,8 @@ class _ConclusionsOutput(BaseModel):
 
 
 def _get_conclusions_llm():
-    """Get LLM for conclusions synthesis with structured output."""
-    return get_llm(module="conclusions", output_schema=_ConclusionsOutput)
+    """Get LLM for conclusions synthesis."""
+    return get_llm(module="conclusions")
 
 
 def synthesize_conclusions(state: dict) -> dict:
@@ -86,7 +99,8 @@ def synthesize_conclusions(state: dict) -> dict:
         HumanMessage(content=human_content),
     ]
 
-    result: _ConclusionsOutput = _get_conclusions_llm().invoke(messages)
+    response = _get_conclusions_llm().invoke(messages)
+    result: _ConclusionsOutput = parse_llm_json(response.content, _ConclusionsOutput)
 
     conclusions = [c.model_dump() for c in result.conclusions]
     return {"_conclusions": conclusions}

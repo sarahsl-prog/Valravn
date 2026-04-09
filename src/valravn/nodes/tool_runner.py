@@ -10,6 +10,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from valravn.core.llm_factory import get_llm
+from valravn.core.parsing import parse_llm_json
 
 from valravn.models.records import ToolInvocationRecord
 from valravn.models.report import SelfCorrectionEvent, ToolFailureRecord
@@ -21,8 +22,8 @@ class _CorrectionSpec(BaseModel):
 
 
 def _get_correction_llm():
-    """Get LLM for tool command correction with structured output."""
-    return get_llm(module="tool_runner", output_schema=_CorrectionSpec)
+    """Get LLM for tool command correction."""
+    return get_llm(module="tool_runner")
 
 
 _CORRECTION_CONTEXT = """\
@@ -60,11 +61,13 @@ def _request_correction(
         f"Original command: {original_cmd}\n"
         f"Exit code: {exit_code}\n"
         f"Stderr output:\n{stderr}\n\n"
-        "Produce a corrected argv list that will resolve the failure. "
-        "Return only the corrected command and your rationale."
+        "Produce a corrected argv list that will resolve the failure.\n"
+        "Respond with valid JSON only — no markdown, no prose outside the JSON object.\n"
+        'Output exactly: {"corrected_cmd": ["<executable>", "<arg1>", ...], "rationale": "<why>"}'
     )
     llm = _get_correction_llm()
-    return llm.invoke(prompt)
+    response = llm.invoke(prompt)
+    return parse_llm_json(response.content, _CorrectionSpec)
 
 
 def _run_single_attempt(

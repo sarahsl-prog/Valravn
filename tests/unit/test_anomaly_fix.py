@@ -73,19 +73,18 @@ def test_anomaly_response_action_from_llm(mock_llm_fn, tmp_path):
         had_output=True,
     )
 
+    import json
     # Mock LLM returns response_action = "no_follow_up_warranted"
-    mock_result = MagicMock()
-    mock_result.anomaly_detected = True
-    mock_result.model_dump.return_value = {
+    mock_response = MagicMock(content=json.dumps({
         "anomaly_detected": True,
         "description": "Suspicious absence of expected files",
         "forensic_significance": "Files may have been wiped",
         "category": "unexpected_absence",
         "response_action": "no_follow_up_warranted",
-    }
+    }))
 
     mock_llm = MagicMock()
-    mock_llm.invoke.return_value = mock_result
+    mock_llm.invoke.return_value = mock_response
     mock_llm_fn.return_value = mock_llm
 
     state = {

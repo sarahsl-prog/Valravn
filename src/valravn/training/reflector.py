@@ -10,6 +10,7 @@ import mlflow
 from loguru import logger
 
 from valravn.core.llm_factory import get_llm
+from valravn.core.parsing import parse_llm_json
 
 _SYSTEM_PROMPT = """\
 You are an expert DFIR training analyst comparing a successful and a failed agent trajectory.
@@ -25,11 +26,13 @@ attribution types:
                            encrypted evidence, missing tools, inherently ambiguous task).
                            No playbook change is warranted.
 
-For each analysis provide:
-  - attribution  : one of the three types above (exact string)
-  - root_cause   : a concise single-sentence explanation of the failure mechanism
-  - coverage_gap : (only for actionable_gap) a brief description of the missing or incorrect
-                   playbook rule; leave empty for the other attribution types
+Respond with valid JSON only — no markdown, no prose outside the JSON object.
+Output exactly this structure:
+{
+  "attribution": "<actionable_gap|execution_variance|intractable>",
+  "root_cause": "<single sentence>",
+  "coverage_gap": "<missing/incorrect rule, or empty string if not actionable_gap>"
+}
 """
 
 _ALLOWED_ATTRIBUTIONS = {"actionable_gap", "execution_variance", "intractable"}
@@ -78,8 +81,8 @@ def _log_invalid_attribution(raw: str, cleaned: str) -> None:
 
 
 def _get_reflector_llm():
-    """Get LLM for trajectory reflection with structured output."""
-    return get_llm(module="reflector", output_schema=ReflectionDiagnostic)
+    """Get LLM for trajectory reflection."""
+    return get_llm(module="reflector")
 
 
 def reflect_on_trajectory(
@@ -98,5 +101,5 @@ def reflect_on_trajectory(
             )
         ),
     ]
-    result: ReflectionDiagnostic = _get_reflector_llm().invoke(messages)
-    return result
+    response = _get_reflector_llm().invoke(messages)
+    return parse_llm_json(response.content, ReflectionDiagnostic)

@@ -84,20 +84,20 @@ def test_check_anomalies_none_detected(read_only_evidence, output_dir, tmp_path)
 
     invocation = _make_invocation(stdout_file)
 
-    mock_result = MagicMock()
-    mock_result.anomaly_detected = False
-    mock_result.model_dump.return_value = {
+    import json
+    mock_response = MagicMock(content=json.dumps({
         "anomaly_detected": False,
         "description": "",
         "forensic_significance": "",
         "category": "",
-    }
+        "response_action": "no_follow_up_warranted",
+    }))
 
     state = _base_state(read_only_evidence, output_dir, invocations=[invocation])
 
     with patch("valravn.nodes.anomaly._get_anomaly_llm") as mock_llm_fn:
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_result
+        mock_llm.invoke.return_value = mock_response
         mock_llm_fn.return_value = mock_llm
 
         result = check_anomalies(state)
@@ -121,15 +121,14 @@ def test_check_anomalies_detected(read_only_evidence, output_dir, tmp_path):
         "category": "orphaned_relationship",
     }
 
-    mock_result = MagicMock()
-    mock_result.anomaly_detected = True
-    mock_result.model_dump.return_value = anomaly_dump
+    import json
+    mock_response = MagicMock(content=json.dumps({**anomaly_dump, "response_action": "no_follow_up_warranted"}))
 
     state = _base_state(read_only_evidence, output_dir, invocations=[invocation])
 
     with patch("valravn.nodes.anomaly._get_anomaly_llm") as mock_llm_fn:
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_result
+        mock_llm.invoke.return_value = mock_response
         mock_llm_fn.return_value = mock_llm
 
         result = check_anomalies(state)
