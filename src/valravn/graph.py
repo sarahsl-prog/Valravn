@@ -10,6 +10,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 
 from valravn.config import AppConfig, OutputConfig
+from valravn.core.tool_verifier import verify_tools_or_raise
 from valravn.models.task import InvestigationPlan, InvestigationTask
 from valravn.state import AgentState
 
@@ -130,11 +131,33 @@ def _build_failure_trace(state: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
-def run(task: InvestigationTask, app_cfg: AppConfig, out_cfg: OutputConfig) -> int:
-    """Compile and invoke the investigation graph. Returns exit code (0 or 1)."""
+def run(
+    task: InvestigationTask,
+    app_cfg: AppConfig,
+    out_cfg: OutputConfig,
+    *,
+    skip_tool_check: bool = False,
+) -> int:
+    """Compile and invoke the investigation graph. Returns exit code (0 or 1).
+
+    Args:
+        task: Investigation task with prompt and evidence references
+        app_cfg: Application configuration
+        out_cfg: Output directory configuration
+        skip_tool_check: If True, skip forensic tool availability verification
+                         (not recommended for normal use)
+    """
     import sqlite3
 
     from loguru import logger
+
+    # Verify forensic tools are available (unless skipped)
+    if not skip_tool_check:
+        try:
+            verify_tools_or_raise(raise_on_missing=True)
+        except RuntimeError as e:
+            logger.error("Forensic tool verification failed: {}", e)
+            raise
 
     # Validate output directory is writable
     output_dir = out_cfg.output_dir.resolve()

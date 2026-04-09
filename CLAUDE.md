@@ -33,8 +33,12 @@ ruff check .
 ## Environment Variables
 
 ```
-ANTHROPIC_API_KEY       # required — Claude model via langchain-anthropic
+ANTHROPIC_API_KEY       # required for Anthropic models — Claude via langchain-anthropic
+OPENAI_API_KEY          # required for OpenAI models
+OPENROUTER_API_KEY      # required for OpenRouter
+OLLAMA_BASE_URL         # required for Ollama (default: http://localhost:11434)
 VALRAVN_MAX_RETRIES     # optional override for retry.max_attempts (default: 3)
+VALRAVN_{MODULE}_MODEL  # optional per-module model override (e.g., VALRAVN_PLAN_MODEL)
 ```
 
 No `LANGCHAIN_API_KEY` or `LANGCHAIN_TRACING_V2` — LangSmith is not used.
@@ -47,6 +51,7 @@ nodes are plain functions accepting `AgentState` and returning partial state dic
 ## Recent Changes
 
 - 001-autonomous-dfir-agents: Evaluation replaced LangSmith → MLflow (local); air-gap safe
+- v0.2.0 (2026-04-09): Added RCL training system (opt-in), checkpoint cleanup config, configurable skill paths, trust-based anomaly filtering, Ollama model fallback support
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

@@ -12,6 +12,48 @@ retry:
 mlflow:
   tracking_uri: http://127.0.0.1:5000   # local MLflow server URI
   experiment_name: valravn-evaluation    # MLflow experiment name for evaluators
+
+# Multi-provider LLM configuration (with fallback support)
+models:
+  plan:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  reflector:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  mutator:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  anomaly:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  conclusions:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  self_assess:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  tool_runner:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+
+# RCL Training System (opt-in)
+training:
+  enabled: false
+  state_dir: ./training
+  min_failure_trace_length: 100
+
+# Skill Paths Configuration
+skills:
+  base_path: ~/.claude/skills
+
+# Checkpoint Cleanup Policy
+checkpoint_cleanup:
+  retention_days: 7
+  max_checkpoints_per_thread: 1000
+  min_checkpoints_per_thread: 2
+  auto_cleanup: true
+  auto_vacuum: false
 ```
 
 ### `retry.max_attempts`
@@ -155,22 +197,39 @@ Valravn supports multiple LLM providers via a unified factory. Configure models 
 
 ```yaml
 models:
-  plan: anthropic:claude-sonnet-4-6
-  reflector: anthropic:claude-sonnet-4-6
-  mutator: anthropic:claude-sonnet-4-6
-  anomaly: anthropic:claude-sonnet-4-6
-  conclusions: anthropic:claude-sonnet-4-6
-  tool_runner: openai:gpt-4o  # Example: use OpenAI for tool corrections
+  plan:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  reflector:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  mutator:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  anomaly:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  conclusions:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  self_assess:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  tool_runner:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
 ```
 
-**Provider format:** `provider:model_name`
+**Provider format:** `provider:model_name` or a list for fallback
 
 | Provider | Format Example | Notes |
 |----------|----------------|-------|
 | Anthropic | `anthropic:claude-sonnet-4-6` | Requires `ANTHROPIC_API_KEY` |
 | OpenAI | `openai:gpt-4o` | Requires `OPENAI_API_KEY` |
-| Ollama | `ollama:llama3.2` | Local inference, requires Ollama server |
+| Ollama | `ollama:kimi-k2.5:cloud` | Local inference, requires `OLLAMA_BASE_URL` |
 | OpenRouter | `openrouter:anthropic/claude-3-opus-20240229` | Requires `OPENROUTER_API_KEY` |
+
+**Fallback Support:** When a list is provided, models are tried in order. If the first fails (timeout, connection error, API error), the next is tried automatically.
 
 Override per-module via environment variables:
 
@@ -181,6 +240,39 @@ export VALRAVN_REFLECTOR_MODEL=openrouter:anthropic/claude-3-opus-20240229
 
 ---
 
+## RCL Training System (Opt-in)
+
+The Reflection-Calibration-Learning (RCL) system enables Valravn to learn from failed investigations and improve its forensic playbooks over time.
+
+```yaml
+training:
+  enabled: false                      # Set to true to enable (opt-in)
+  state_dir: ./training               # Directory for training artifacts
+  min_failure_trace_length: 100       # Minimum trace length to process
+```
+
+**Important:** Training is disabled by default. Set `enabled: true` to activate. The system only processes failures that meet the minimum trace length threshold.
+
+---
+
+## Skill Paths Configuration
+
+Configure where Valravn looks for forensic domain SKILL.md files:
+
+```yaml
+skills:
+  base_path: ~/.claude/skills
+```
+
+Each skill domain should have a subdirectory with SKILL.md:
+- `memory-analysis`: `<base_path>/memory-analysis/SKILL.md`
+- `sleuthkit`: `<base_path>/sleuthkit/SKILL.md`
+- `windows-artifacts`: `<base_path>/windows-artifacts/SKILL.md`
+- `plaso-timeline`: `<base_path>/plaso-timeline/SKILL.md`
+- `yara-hunting`: `<base_path>/yara-hunting/SKILL.md`
+
+---
+
 ## Checkpoint Database Cleanup
 
 The SQLite checkpoint database enables crash recovery but can grow over time. Configure automatic cleanup:
@@ -188,23 +280,26 @@ The SQLite checkpoint database enables crash recovery but can grow over time. Co
 ```yaml
 checkpoint_cleanup:
   retention_days: 7                    # Delete checkpoints older than N days
-  max_checkpoints_per_thread: 100    # Keep at most N checkpoints per thread
-  min_checkpoints_per_thread: 2      # Never delete below this threshold
-  auto_cleanup: true                 # Run automatically after each investigation
+  max_checkpoints_per_thread: 1000     # Keep at most N checkpoints per thread
+  min_checkpoints_per_thread: 2        # Never delete below this threshold
+  auto_cleanup: true                   # Run automatically after each investigation
   auto_vacuum: false                 # Reclaim disk space (slower)
 ```
 
 **Why cleanup?** Each investigation thread writes a checkpoint after every node. With frequent investigations, this can accumulate gigabytes of state snapshots. The cleanup policy applies both time-based and count-based retention.
+
+**Audit Mode:** Set `auto_cleanup: false` to preserve all checkpoints for compliance/auditing.
 
 Manual cleanup example:
 
 ```python
 from valravn.checkpoint_cleanup import cleanup_checkpoints
 
-stats = cleanup_checkpoints(
+result = cleanup_checkpoints(
     db_path="/path/to/checkpoints.db",
     retention_days=7,
-    max_checkpoints=100
+    max_checkpoints_per_thread=1000,
+    min_checkpoints_per_thread=2
 )
-print(f"Deleted {stats['total_deleted']} checkpoints")
+print(f"Deleted {result.deleted_count} checkpoints")
 ```

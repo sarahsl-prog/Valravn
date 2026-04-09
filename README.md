@@ -109,13 +109,44 @@ mlflow:
   experiment_name: valravn-evaluation
 
 # Multi-provider LLM configuration (per-module model selection)
+# Supports single model or fallback list (tried in order)
 models:
-  plan: anthropic:claude-sonnet-4-6
-  reflector: anthropic:claude-sonnet-4-6
-  mutator: anthropic:claude-sonnet-4-6
-  anomaly: anthropic:claude-sonnet-4-6
-  conclusions: anthropic:claude-sonnet-4-6
-  tool_runner: anthropic:claude-sonnet-4-6
+  plan:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  reflector:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  mutator:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  anomaly:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  conclusions:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  tool_runner:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+
+# RCL Training System (opt-in)
+training:
+  enabled: false              # Set to true to enable learning from failures
+  state_dir: ./training       # Directory for training artifacts
+  min_failure_trace_length: 100
+
+# Skill Paths (forensic domain SKILL.md files)
+skills:
+  base_path: ~/.claude/skills
+
+# Checkpoint Cleanup (set auto_cleanup: false for audit mode)
+checkpoint_cleanup:
+  retention_days: 7
+  max_checkpoints_per_thread: 1000
+  min_checkpoints_per_thread: 2
+  auto_cleanup: true
+  auto_vacuum: false
 ```
 
 Override retry limit at runtime without editing the file:
@@ -230,12 +261,12 @@ src/valravn/
     llm_factory.py      # Multi-provider LLM factory (Q4) — Anthropic, OpenAI, Ollama, OpenRouter
   nodes/
     plan.py             # LLM-driven investigation planner
-    skill_loader.py     # Loads domain SKILL.md files from ~/.claude/skills/
+    skill_loader.py     # Loads domain SKILL.md files from ~/.claude/skills/ (configurable)
     tool_runner.py      # Subprocess executor with retry and self-correction
-    anomaly.py          # LLM-driven anomaly detector and follow-up generator
+    anomaly.py          # LLM-driven anomaly detector with trust-based filtering
     report.py           # Markdown + JSON report writer
-    conclusions.py      # (New) LLM-driven conclusion synthesis
-    self_assess.py      # (New) Self-assessment node for progress evaluation
+    conclusions.py      # LLM-driven conclusion synthesis
+    self_assess.py      # Self-assessment node for progress evaluation
   models/
     task.py             # InvestigationTask, InvestigationPlan, PlannedStep
     records.py          # ToolInvocationRecord, Anomaly
@@ -262,9 +293,9 @@ tests/
 
 ## Adding a Forensic Domain
 
-1. Create `~/.claude/skills/<domain>/SKILL.md` with tool invocation guidance.
-2. Add the domain key to `SKILL_PATHS` in `src/valravn/nodes/skill_loader.py`.
-3. The `load_skill` graph node resolves paths dynamically — no other changes needed.
+1. Create a SKILL.md file at `<skills.base_path>/<domain>/SKILL.md` (default: `~/.claude/skills/<domain>/SKILL.md`).
+2. The skill will be automatically available by domain name — no code changes needed.
+3. Configure custom skill paths in `config.yaml` under the `skills:` section.
 
 Supported domains out of the box: `memory-analysis`, `sleuthkit`, `windows-artifacts`, `plaso-timeline`, `yara-hunting`.
 

@@ -9,6 +9,7 @@ from loguru import logger
 from pydantic import ValidationError
 
 from valravn.config import OutputConfig, load_config
+from valravn.core.tool_verifier import verify_tools_or_raise
 from valravn.models.task import InvestigationTask
 
 
@@ -71,7 +72,37 @@ def main() -> None:
     _configure_logging()
     args = build_parser().parse_args()
 
+    if args.command == "check-tools":
+        from valravn.core.tool_verifier import ToolVerifier
+
+        verifier = ToolVerifier()
+        verifier.verify_all()
+
+        if args.verbose:
+            print(verifier.generate_report())
+        else:
+            missing = verifier.get_missing_critical()
+            if missing:
+                print(f"Missing {len(missing)} critical tool(s): {', '.join(missing)}")
+                sys.exit(1)
+            else:
+                print("All critical forensic tools are available.")
+
+        sys.exit(0)
+
     if args.command == "investigate":
+        # Verify forensic tools are available (unless skipped)
+        if not args.skip_tool_check:
+            try:
+                verify_tools_or_raise(raise_on_missing=True)
+            except RuntimeError as e:
+                print(f"Error: {e}", file=sys.stderr)
+                print(
+                    "\nUse --skip-tool-check to bypass this verification (not recommended).",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
+
         app_cfg = load_config(args.config)
         out_cfg = OutputConfig(output_dir=args.output_dir.resolve())
         out_cfg.ensure_dirs()

@@ -118,6 +118,15 @@ Reads the most recent tool invocation's stdout (capped at 50 000 bytes) and asks
 | `unexpected_absence` | Expected artifacts entirely missing |
 | `integrity_failure` | Hash mismatches, corrupted records, truncated data |
 
+**Trust-Based Filtering:**
+The node integrates with the self-assessment trust coefficient to filter anomalies based on confidence:
+
+- **Trust < 0.3:** Non-critical anomalies are filtered (timestamp_contradiction, orphaned_relationship, cross_tool_conflict, unexpected_absence)
+- **Critical anomalies (`integrity_failure`):** Always pass regardless of trust level (hash mismatches, corrupted records cannot be ignored)
+- **Trust builds:** Over investigation phases (warmup → ramp up → full strength → anneal)
+
+This prevents low-confidence false positives from derailing investigations while ensuring critical integrity issues are always escalated.
+
 Sets `_pending_anomalies = True` if an anomaly is detected; otherwise routes to `update_plan`.
 
 ---
@@ -187,6 +196,13 @@ Key fields:
 | Findings report | Markdown + JSON | `reports/<timestamp>_<slug>.*` |
 
 The SQLite checkpoint enables crash recovery: re-running with the same `thread_id` resumes from the last completed node. Configure automatic cleanup via `config.yaml` to prevent unbounded growth.
+
+### Additional State Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `_trust_coefficient` | `float` | Self-assessment confidence (0.0-1.0) affecting anomaly filtering |
+| `_skills_config` | `SkillsConfig` | Skill path configuration from config.yaml |
 
 ### Checkpoint Cleanup
 

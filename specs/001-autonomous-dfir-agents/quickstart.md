@@ -120,6 +120,31 @@ retry:
 mlflow:
   tracking_uri: http://127.0.0.1:5000
   experiment_name: valravn-evaluation
+
+# Multi-provider LLM configuration (with fallback support)
+models:
+  plan:
+    - ollama:kimi-k2.5:cloud
+    - ollama:qwen3:14b
+  # ... (other modules)
+
+# RCL Training (opt-in)
+training:
+  enabled: false
+  state_dir: ./training
+  min_failure_trace_length: 100
+
+# Skill paths
+skills:
+  base_path: ~/.claude/skills
+
+# Checkpoint cleanup (set auto_cleanup: false for audit mode)
+checkpoint_cleanup:
+  retention_days: 7
+  max_checkpoints_per_thread: 1000
+  min_checkpoints_per_thread: 2
+  auto_cleanup: true
+  auto_vacuum: false
 ```
 
 Override retry limit at runtime:
@@ -133,22 +158,34 @@ VALRAVN_MAX_RETRIES=5 valravn investigate --prompt "..." --evidence /mnt/...
 
 ```
 src/valravn/
-├── cli.py           # Entry point
-├── graph.py         # LangGraph StateGraph — nodes + edges + conditional routing
-├── state.py         # AgentState TypedDict
-├── nodes/           # One module per graph node
+├── cli.py                  # Entry point
+├── graph.py                # LangGraph StateGraph — nodes + edges + conditional routing
+├── state.py                # AgentState TypedDict
+├── config.py               # AppConfig with all settings
+├── checkpoint_cleanup.py   # SQLite checkpoint management
+├── nodes/                  # One module per graph node
 │   ├── plan.py
 │   ├── skill_loader.py
 │   ├── tool_runner.py
-│   ├── anomaly.py
-│   └── report.py
-├── models/          # Pydantic data models
+│   ├── anomaly.py          # Trust-based anomaly detection
+│   ├── report.py
+│   ├── conclusions.py      # Conclusion synthesis
+│   └── self_assess.py      # Self-assessment for trust
+├── models/                 # Pydantic data models
 │   ├── task.py
 │   ├── records.py
 │   └── report.py
-├── evaluation/      # MLflow-based evaluators
+├── core/                   # Core utilities
+│   └── llm_factory.py      # Multi-provider LLM factory
+├── evaluation/             # MLflow-based evaluators
 │   └── evaluators.py
-└── config.py        # RetryConfig, OutputConfig
+└── training/               # RCL training system
+    ├── playbook.py
+    ├── replay_buffer.py
+    ├── reflector.py
+    ├── mutator.py
+    ├── feasibility.py
+    └── rcl_loop.py
 
 tests/
 ├── unit/            # Mocked subprocess, no SIFT tools needed
@@ -163,9 +200,14 @@ tests/
 
 ## Adding a New Forensic Domain
 
-1. Add the skill file to `~/.claude/skills/<domain>/SKILL.md`
-2. Add the domain key to `SKILL_PATHS` in `src/valravn/nodes/skill_loader.py`
-3. The graph's `load_skill` node resolves the path dynamically — no other changes needed
+1. Add the skill file to `~/.claude/skills/<domain>/SKILL.md` (or your configured base_path)
+2. The domain will be automatically available — no code changes needed
+
+To configure custom skill paths, set in `config.yaml`:
+```yaml
+skills:
+  base_path: /path/to/skills
+```
 
 ---
 
