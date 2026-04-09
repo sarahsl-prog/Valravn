@@ -33,6 +33,8 @@ Rules:
   plaso-timeline, yara-hunting
 - tool_cmd must be the exact subprocess argv (list of strings)
 - Do NOT include evidence paths as output destinations
+- ALL tool output files (--storage-file, -w, --output, etc.) MUST use the
+  analysis_dir provided in the human message — never /tmp/, never hardcode paths
 
 CRITICAL TOOL SYNTAX — follow exactly:
 
@@ -77,12 +79,17 @@ def plan_investigation(state: dict) -> dict:
     logger.info("Node: plan_investigation | prompt={!r}", task.prompt[:80])
     output_dir = Path(state.get("_output_dir", "."))
 
+    analysis_dir = output_dir / "analysis"
+
     messages = [
         SystemMessage(content=_SYSTEM_PROMPT),
         HumanMessage(
             content=(
                 f"Investigation prompt: {task.prompt}\n"
-                f"Evidence paths: {', '.join(task.evidence_refs)}"
+                f"Evidence paths: {', '.join(task.evidence_refs)}\n"
+                f"Analysis output directory: {analysis_dir}\n"
+                f"Use {analysis_dir}/<filename> for ALL tool output files "
+                f"(--storage-file, bodyfile, etc.)."
             )
         ),
     ]

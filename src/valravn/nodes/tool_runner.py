@@ -47,9 +47,15 @@ def _request_correction(
     original_cmd: list[str],
     exit_code: int,
     stderr: str,
+    analysis_dir: Path | None = None,
 ) -> _CorrectionSpec:
+    output_note = (
+        f"ALL output files must go to: {analysis_dir}\n"
+        if analysis_dir else ""
+    )
     prompt = (
         f"{_CORRECTION_CONTEXT}\n"
+        f"{output_note}"
         f"A forensic tool invocation failed on attempt {attempt_number}.\n\n"
         f"Original command: {original_cmd}\n"
         f"Exit code: {exit_code}\n"
@@ -204,6 +210,7 @@ def run_forensic_tool(state: dict) -> dict:
                 original_cmd=list(rec.cmd),
                 exit_code=proc.returncode,
                 stderr=proc.stderr,
+                analysis_dir=analysis_dir,
             )
             event = SelfCorrectionEvent(
                 step_id=step_id,
