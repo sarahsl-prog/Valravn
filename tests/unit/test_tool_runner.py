@@ -100,13 +100,19 @@ def test_run_tool_invalid_step_id_raises(read_only_evidence, output_dir):
 # US3 — Retry loop and self-correction tests
 # ---------------------------------------------------------------------------
 
-def _make_proc(returncode: int, stdout: str = "", stderr: str = ""):
-    """Build a mock CompletedProcess-like object."""
-    proc = MagicMock()
-    proc.returncode = returncode
-    proc.stdout = stdout
-    proc.stderr = stderr
-    return proc
+def _streaming_side_effects(*specs):
+    """Build a side_effect function for mocking _run_with_streaming.
+
+    Each spec is (returncode, stdout, stderr). Successive calls to the
+    returned function yield results from each spec in order.
+    """
+    call_iter = iter(specs)
+    def _effect(cmd, stdout_path, stderr_path, timeout_seconds):
+        returncode, stdout, stderr = next(call_iter)
+        stdout_path.write_text(stdout)
+        stderr_path.write_text(stderr)
+        return (returncode, bool(stdout.strip()))
+    return _effect
 
 
 def _state_with_retries(read_only_evidence, output_dir, tool_cmd, max_attempts=3):
@@ -125,14 +131,13 @@ def _state_with_retries(read_only_evidence, output_dir, tool_cmd, max_attempts=3
 
 def test_retry_on_failure_succeeds_second_attempt(read_only_evidence, output_dir):
     """First subprocess call fails (exit 1, no output); second succeeds (exit 0, output)."""
-    fail_proc = _make_proc(returncode=1, stdout="", stderr="bad arg")
-    ok_proc = _make_proc(returncode=0, stdout="result data", stderr="")
+    effect = _streaming_side_effects((1, "", "bad arg"), (0, "result data", ""))
 
     correction = _CorrectionSpec(corrected_cmd=["fixed", "cmd"], rationale="fixed the flag")
     mock_llm = MagicMock()
     mock_llm.invoke.return_value = MagicMock(content=json.dumps(correction.model_dump()))
 
-    with patch("subprocess.run", side_effect=[fail_proc, ok_proc]), \
+    with patch("valravn.nodes.tool_runner._run_with_streaming", side_effect=effect), \
          patch("valravn.nodes.tool_runner._get_correction_llm", return_value=mock_llm):
         state = _state_with_retries(read_only_evidence, output_dir, ["original", "cmd"])
         result = run_forensic_tool(state)
@@ -148,12 +153,12 @@ def test_retry_on_failure_succeeds_second_attempt(read_only_evidence, output_dir
 
 def test_exhaustion_creates_tool_failure_record(read_only_evidence, output_dir):
     """All three attempts fail; node returns _step_exhausted=True and a ToolFailureRecord."""
-    fail_proc = _make_proc(returncode=1, stdout="", stderr="error")
+    effect = _streaming_side_effects((1, "", "error"), (1, "", "error"), (1, "", "error"))
     correction = _CorrectionSpec(corrected_cmd=["still", "broken"], rationale="attempt fix")
     mock_llm = MagicMock()
     mock_llm.invoke.return_value = MagicMock(content=json.dumps(correction.model_dump()))
 
-    with patch("subprocess.run", return_value=fail_proc), \
+    with patch("valravn.nodes.tool_runner._run_with_streaming", side_effect=effect), \
          patch("valravn.nodes.tool_runner._get_correction_llm", return_value=mock_llm):
         state = _state_with_retries(read_only_evidence, output_dir, ["bad", "cmd"], max_attempts=3)
         result = run_forensic_tool(state)
@@ -172,9 +177,6 @@ def test_exhaustion_creates_tool_failure_record(read_only_evidence, output_dir):
 
 def test_self_correction_event_fields(read_only_evidence, output_dir):
     """SelfCorrectionEvent captures original_cmd, corrected_cmd, and correction_rationale."""
-    fail_proc = _make_proc(returncode=1, stdout="", stderr="missing flag")
-    ok_proc = _make_proc(returncode=0, stdout="success output", stderr="")
-
     original_cmd = ["vol.py", "-f", "mem.raw", "wrong.plugin"]
     corrected_cmd = ["vol.py", "-f", "mem.raw", "windows.pslist"]
     rationale = "Plugin name was incorrect"
@@ -183,7 +185,9 @@ def test_self_correction_event_fields(read_only_evidence, output_dir):
     mock_llm = MagicMock()
     mock_llm.invoke.return_value = MagicMock(content=json.dumps(correction.model_dump()))
 
-    with patch("subprocess.run", side_effect=[fail_proc, ok_proc]), \
+    effect = _streaming_side_effects((1, "", "missing flag"), (0, "success output", ""))
+
+    with patch("valravn.nodes.tool_runner._run_with_streaming", side_effect=effect), \
          patch("valravn.nodes.tool_runner._get_correction_llm", return_value=mock_llm):
         state = _state_with_retries(read_only_evidence, output_dir, original_cmd)
         result = run_forensic_tool(state)
@@ -199,12 +203,12 @@ def test_self_correction_event_fields(read_only_evidence, output_dir):
 
 def test_exhaustion_exit_code_one(read_only_evidence, output_dir):
     """_tool_failure is not None when exhausted — graph uses this to set exit code 1."""
-    fail_proc = _make_proc(returncode=2, stdout="", stderr="fatal error")
+    effect = _streaming_side_effects((2, "", "fatal error"), (2, "", "fatal error"))
     correction = _CorrectionSpec(corrected_cmd=["retry", "cmd"], rationale="trying again")
     mock_llm = MagicMock()
     mock_llm.invoke.return_value = MagicMock(content=json.dumps(correction.model_dump()))
 
-    with patch("subprocess.run", return_value=fail_proc), \
+    with patch("valravn.nodes.tool_runner._run_with_streaming", side_effect=effect), \
          patch("valravn.nodes.tool_runner._get_correction_llm", return_value=mock_llm):
         state = _state_with_retries(read_only_evidence, output_dir, ["fail", "cmd"], max_attempts=2)
         result = run_forensic_tool(state)
@@ -296,13 +300,12 @@ def test_tool_runner_blocks_destructive_command(tmp_path):
 
 def test_tool_timeout_sets_exit_code_minus_one(read_only_evidence, output_dir):
     """Tool timeout (after 1hr) results in exit_code=-1."""
-    # The timeout handling is in _run_single_attempt, verify by mocking subprocess.run
     timeout_error = subprocess.TimeoutExpired(
         cmd=["sleep", "10"],
         timeout=3600,
     )
 
-    with patch("subprocess.run", side_effect=timeout_error):
+    with patch("valravn.nodes.tool_runner._run_with_streaming", side_effect=timeout_error):
         state = _state(read_only_evidence, output_dir, ["sleep", "10"])
         result = run_forensic_tool(state)
 

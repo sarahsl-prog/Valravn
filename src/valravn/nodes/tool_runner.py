@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import subprocess
+import sys
 import time
 import uuid
 from datetime import datetime, timezone
@@ -72,6 +74,61 @@ def _request_correction(
     return parse_llm_json(response.content, _CorrectionSpec)
 
 
+def _run_with_streaming(
+    cmd: list[str],
+    stdout_path: Path,
+    stderr_path: Path,
+    timeout_seconds: int,
+) -> tuple[int, bool]:
+    """Run a subprocess with real-time stderr streaming to the terminal.
+
+    Stdout is written directly to file (forensic output, often large).
+    Stderr is streamed to both a file and the terminal so progress bars
+    and status lines from tools like log2timeline.py are visible.
+
+    Returns:
+        (returncode, had_stdout) tuple.
+
+    Raises:
+        subprocess.TimeoutExpired: if the process exceeds timeout_seconds.
+    """
+    with open(stdout_path, "w") as stdout_f, open(stderr_path, "wb") as stderr_f:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=stdout_f,
+            stderr=subprocess.PIPE,
+        )
+
+        # Stream stderr to file + terminal in real-time.
+        # Use os.read() on the raw fd so we get whatever bytes are available
+        # immediately — this keeps progress bars and \r-based status lines
+        # responsive rather than buffering until a newline.
+        fd = proc.stderr.fileno()
+        deadline = time.monotonic() + timeout_seconds
+
+        while True:
+            if time.monotonic() > deadline:
+                proc.kill()
+                proc.wait()
+                raise subprocess.TimeoutExpired(cmd, timeout_seconds)
+
+            try:
+                chunk = os.read(fd, 4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+
+            stderr_f.write(chunk)
+            sys.stderr.buffer.write(chunk)
+            sys.stderr.buffer.flush()
+
+        proc.wait()
+
+    had_stdout = stdout_path.stat().st_size > 0
+    return proc.returncode, had_stdout
+
+
 def _run_single_attempt(
     step,
     step_id: str,
@@ -86,39 +143,40 @@ def _run_single_attempt(
     t0 = time.monotonic()
 
     try:
-        proc = subprocess.run(
-            step.tool_cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
+        returncode, had_stdout = _run_with_streaming(
+            step.tool_cmd, stdout_path, stderr_path, timeout_seconds,
         )
-    except subprocess.TimeoutExpired as e:
-        # Build a synthetic failed process result
-        proc = subprocess.CompletedProcess(
-            args=step.tool_cmd,
-            returncode=-1,
-            stdout=e.output.decode() if e.output else "",
-            stderr=f"Tool timed out after {timeout_seconds}s",
-        )
+    except subprocess.TimeoutExpired:
+        stderr_path.write_text(f"Tool timed out after {timeout_seconds}s")
+        if not stdout_path.exists():
+            stdout_path.write_text("")
+        returncode = -1
+        had_stdout = False
 
     duration = time.monotonic() - t0
     completed = datetime.now(timezone.utc)
 
-    stdout_path.write_text(proc.stdout)
-    stderr_path.write_text(proc.stderr)
+    # Read back stderr for the CompletedProcess (used by correction logic)
+    stderr_text = stderr_path.read_text(errors="replace") if stderr_path.exists() else ""
+    proc = subprocess.CompletedProcess(
+        args=step.tool_cmd,
+        returncode=returncode,
+        stdout="",  # stdout is on disk, not in memory
+        stderr=stderr_text,
+    )
 
     rec = ToolInvocationRecord(
         id=inv_id,
         step_id=step_id,
         attempt_number=len(step.invocation_ids) + 1,
         cmd=step.tool_cmd,
-        exit_code=proc.returncode,
+        exit_code=returncode,
         stdout_path=stdout_path,
         stderr_path=stderr_path,
         started_at_utc=started,
         completed_at_utc=completed,
         duration_seconds=duration,
-        had_output=bool(proc.stdout.strip()),
+        had_output=had_stdout,
     )
 
     rec_path = analysis_dir / f"{inv_id}.record.json"
