@@ -208,24 +208,32 @@ def run_forensic_tool(state: dict) -> dict:
         # Failed attempt
         is_last = attempt == max_attempts
         if not is_last:
-            # Ask Claude for a corrected command
-            correction = _request_correction(
-                step_id=step_id,
-                attempt_number=attempt,
-                original_cmd=list(rec.cmd),
-                exit_code=proc.returncode,
-                stderr=proc.stderr,
-                analysis_dir=analysis_dir,
-            )
-            event = SelfCorrectionEvent(
-                step_id=step_id,
-                attempt_number=attempt,
-                original_cmd=list(rec.cmd),
-                corrected_cmd=correction.corrected_cmd,
-                correction_rationale=correction.rationale,
-            )
-            self_corrections.append(event)
-            step.tool_cmd = correction.corrected_cmd
+            # Ask LLM for a corrected command; if the LLM call fails
+            # (timeout, bad JSON, network error), skip correction and
+            # retry with the same command rather than crashing the graph.
+            try:
+                correction = _request_correction(
+                    step_id=step_id,
+                    attempt_number=attempt,
+                    original_cmd=list(rec.cmd),
+                    exit_code=proc.returncode,
+                    stderr=proc.stderr,
+                    analysis_dir=analysis_dir,
+                )
+                event = SelfCorrectionEvent(
+                    step_id=step_id,
+                    attempt_number=attempt,
+                    original_cmd=list(rec.cmd),
+                    corrected_cmd=correction.corrected_cmd,
+                    correction_rationale=correction.rationale,
+                )
+                self_corrections.append(event)
+                step.tool_cmd = correction.corrected_cmd
+            except Exception:
+                logger.warning(
+                    "Self-correction LLM failed for step={} attempt={}; retrying with original cmd",
+                    step_id[:8], attempt,
+                )
             if retry_delay > 0:
                 time.sleep(retry_delay)
         else:

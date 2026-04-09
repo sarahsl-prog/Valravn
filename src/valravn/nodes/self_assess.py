@@ -122,9 +122,15 @@ def assess_progress(state: dict) -> dict:
         HumanMessage(content=human_content),
     ]
 
-    llm = get_llm(module="self_assess")
-    response = llm.invoke(messages)
-    result = _parse_assessment(response.content)
+    # Self-assessment is non-critical (observability only). If the LLM call
+    # fails, log the error and continue rather than crashing the graph.
+    try:
+        llm = get_llm(module="self_assess")
+        response = llm.invoke(messages)
+        result = _parse_assessment(response.content)
+    except Exception:
+        logger.warning("Self-assessment LLM failed for step={}; skipping", current_step_id[:8])
+        return {"_self_assessments": list(state.get("_self_assessments") or [])}
 
     signal = SelfGuidanceSignal(
         assessment=result.assessment,

@@ -10,51 +10,57 @@ mlflow:
 # LLM MODEL CONFIGURATION
 # Format: provider:model_name
 # Supported providers: anthropic, openai, ollama, openrouter
+#
+# Each module accepts a single model string OR a list of models.
+# When a list is provided, models are tried in order — if the first fails
+# (timeout, connection error, API error), the next one is tried automatically.
+#
+# Environment variable override: VALRAVN_{MODULE}_MODEL
+#   - Single model:  VALRAVN_PLAN_MODEL=anthropic:claude-sonnet-4-6
+#   - Overrides the entire chain with one model (useful for debugging)
 # =============================================================================
 models:
-  # Investigation planning module
-  # Used to generate investigation steps from prompt
-  plan: ollama:minimax-m2.5:cloud
+  plan:
+    - ollama:minimax-m2.5:cloud
+    - ollama:gemma3:27b
+    - anthropic:claude-sonnet-4-6
+    - ollama:qwen3:14b
 
-  # Trajectory reflector module (RCL training)
-  # Used to diagnose why trajectories fail
-  reflector: ollama:minimax-m2.5:cloud
+  reflector:
+    - ollama:minimax-m2.5:cloud
+    - ollama:gemma3:27b
+    - anthropic:claude-sonnet-4-6
+    - ollama:qwen3:14b
 
-  # Playbook mutator module (RCL training)
-  # Used to generate playbook mutations
-  mutator: ollama:minimax-m2.5:cloud
+  mutator:
+    - ollama:minimax-m2.5:cloud
+    - ollama:gemma3:27b
+    - anthropic:claude-sonnet-4-6
+    - ollama:qwen3:14b
 
-  # Anomaly detection module
-  # Used to detect forensic anomalies in tool output
-  anomaly: ollama:minimax-m2.5:cloud
+  anomaly:
+    - ollama:minimax-m2.5:cloud
+    - ollama:gemma3:27b
+    - anthropic:claude-sonnet-4-6
+    - ollama:qwen3:14b
 
-  # Conclusions synthesis module
-  # Used to synthesize findings from investigation
-  conclusions: ollama:minimax-m2.5:cloud
+  conclusions:
+    - ollama:minimax-m2.5:cloud
+    - ollama:gemma3:27b
+    - anthropic:claude-sonnet-4-6
+    - ollama:qwen3:14b
 
-  # Self-assessment module
-  # Used to assess investigation progress
-  self_assess: ollama:minimax-m2.5:cloud
+  self_assess:
+    - ollama:minimax-m2.5:cloud
+    - ollama:gemma3:27b
+    - anthropic:claude-sonnet-4-6
+    - ollama:qwen3:14b
 
-  # Tool runner correction module
-  # Used to correct failed tool commands
-  tool_runner: ollama:minimax-m2.5:cloud
-
-  # Alternative configurations (uncomment to use):
-  #
-  # # OpenAI GPT-4o for faster/cheaper tasks
-  # tool_runner: openai:gpt-4o
-  #
-  # # Local Llama model via Ollama (no API costs!)
-  # plan: ollama:llama3.2
-  #
-  # # Claude via OpenRouter
-  # reflector: openrouter:anthropic/claude-3-opus-20240229
-  #
-  # # Mix providers per module
-  # plan: openai:gpt-4o
-  # reflector: anthropic:claude-sonnet-4-6
-  # mutator: anthropic:claude-sonnet-4-6
+  tool_runner:
+    - ollama:minimax-m2.5:cloud
+    - ollama:gemma3:27b
+    - anthropic:claude-sonnet-4-6
+    - ollama:qwen3:14b
 
 # =============================================================================
 # CHECKPOINT CLEANUP POLICY (Q6)
@@ -64,16 +70,16 @@ models:
 checkpoint_cleanup:
   # Delete checkpoints older than this many days (default: 7)
   retention_days: 7
-  
+
   # Keep at most this many checkpoints per investigation thread (default: 1000)
   max_checkpoints_per_thread: 100
-  
+
   # Never delete below this many checkpoints per thread (default: 2)
   # This ensures you can always resume even after aggressive cleanup
   min_checkpoints_per_thread: 2
-  
+
   # Automatically run cleanup after each investigation completes
   auto_cleanup: true
-  
+
   # Vacuum database after cleanup to reclaim disk space
   auto_vacuum: false  # Set to true if disk space is a concern (slower cleanup)

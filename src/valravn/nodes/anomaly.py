@@ -94,8 +94,15 @@ def check_anomalies(state: dict) -> dict:
         ),
     ]
 
-    response = _get_anomaly_llm().invoke(messages)
-    result: _AnomalyCheckResult = parse_llm_json(response.content, _AnomalyCheckResult)
+    # Anomaly checking is non-critical. If the LLM call fails, log and
+    # continue the investigation rather than crashing the graph.
+    try:
+        response = _get_anomaly_llm().invoke(messages)
+        result: _AnomalyCheckResult = parse_llm_json(response.content, _AnomalyCheckResult)
+    except Exception:
+        from loguru import logger
+        logger.warning("Anomaly-check LLM failed; skipping anomaly detection for this step")
+        return {"_pending_anomalies": False, "_detected_anomaly_data": None}
 
     if result.anomaly_detected:
         return {
