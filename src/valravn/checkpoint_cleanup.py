@@ -208,4 +208,4 @@ def vacuum_db(db_path: Path) -> None:
     with sqlite3.connect(db_path) as conn:
         conn.execute("VACUUM")
     
-    logger.info("Vacuumed checkpoint database: %s", db_path)
+    logger.info("Vacuumed checkpoint database: {}", db_path)

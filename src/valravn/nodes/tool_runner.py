@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from loguru import logger
 from pydantic import BaseModel
 
 from valravn.core.llm_factory import get_llm
@@ -120,6 +121,7 @@ def run_forensic_tool(state: dict) -> dict:
     plan = state["plan"]
     step_id: str = state["current_step_id"]
     step = next((s for s in plan.steps if s.id == step_id), None)
+    logger.info("Node: run_forensic_tool | step={} cmd={}", step_id[:8], step.tool_cmd if step else "?")
     if step is None:
         raise ValueError(f"Step {step_id!r} not found in plan")
     output_dir = Path(state.get("_output_dir", "."))

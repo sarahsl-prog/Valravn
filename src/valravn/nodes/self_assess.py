@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from loguru import logger
 from pydantic import BaseModel
 
 from valravn.core.llm_factory import get_llm
@@ -35,6 +36,7 @@ def assess_progress(state: dict) -> dict:
     """LangGraph node: self-assess investigation progress before each tool execution."""
     plan = state.get("plan")
     current_step_id = state.get("current_step_id")
+    logger.info("Node: assess_progress | step={}", (current_step_id or "none")[:8])
 
     # If no current step, nothing to assess — return existing assessments unchanged
     if current_step_id is None:

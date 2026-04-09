@@ -180,7 +180,7 @@ def apply_mutation(
     try:
         spec: MutationSpec = _get_mutator_llm().invoke(messages)
     except Exception as e:
-        logger.error("LLM invocation failed during mutation: %s", e)
+        logger.error("LLM invocation failed during mutation: {}", e)
         raise InvalidMutationError(f"LLM failed to produce valid mutation spec: {e}") from e
     
     # BUG-003: Apply safety checks before applying mutation
@@ -188,7 +188,7 @@ def apply_mutation(
 
     if spec.operation == "ADD":
         logger.info(
-            "ADD operation: entry_id=%r to playbook at iteration %d, diagnostic: %r",
+            "ADD operation: entry_id={!r} to playbook at iteration {}, diagnostic: {!r}",
             spec.entry_id,
             iteration,
             diagnostic_text[:200],
@@ -203,7 +203,7 @@ def apply_mutation(
 
     elif spec.operation == "UPDATE":
         logger.info(
-            "UPDATE operation: entry_id=%r at iteration %d, diagnostic: %r",
+            "UPDATE operation: entry_id={!r} at iteration {}, diagnostic: {!r}",
             spec.entry_id,
             iteration,
             diagnostic_text[:200],
@@ -217,7 +217,7 @@ def apply_mutation(
 
     elif spec.operation == "DELETE":
         logger.info(
-            "DELETE operation: entry_id=%r at iteration %d, rationale: %r",
+            "DELETE operation: entry_id={!r} at iteration {}, rationale: {!r}",
             spec.entry_id,
             iteration,
             spec.rationale[:200] if spec.rationale else "(no rationale)",
@@ -230,7 +230,7 @@ def apply_mutation(
         optimizer_state.record_change(iteration, f"DELETE {spec.entry_id}: {spec.rationale}")
 
     elif spec.operation == "NOOP":
-        logger.debug("NOOP operation: no mutation applied at iteration %d", iteration)
+        logger.debug("NOOP operation: no mutation applied at iteration {}", iteration)
 
     # NOOP: no changes to playbook or ledger
 

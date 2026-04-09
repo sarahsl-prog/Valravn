@@ -145,7 +145,7 @@ class FeasibilityMemory:
                 if not result:
                     violations.append(f"[{rule.rule_id}] {rule.description}: {msg}")
             except Exception as e:
-                logger.warning("Feasibility rule %r raised exception: %s", rule.rule_id, e)
+                logger.warning("Feasibility rule {!r} raised exception: {}", rule.rule_id, e)
         
         return len(violations) == 0, violations
     
@@ -190,7 +190,7 @@ def register_feasibility_rule(
         The registered function (for use as decorator).
     """
     _custom_feasibility_rules.append(func)
-    logger.debug("Registered custom feasibility rule: %s", func.__name__)
+    logger.debug("Registered custom feasibility rule: {}", func.__name__)
     return func
 
 
@@ -204,7 +204,7 @@ def unregister_feasibility_rule(
     """
     if func in _custom_feasibility_rules:
         _custom_feasibility_rules.remove(func)
-        logger.debug("Unregistered custom feasibility rule: %s", func.__name__)
+        logger.debug("Unregistered custom feasibility rule: {}", func.__name__)
 
 
 def clear_feasibility_rules() -> None:
@@ -237,7 +237,7 @@ def check_feasibility(case: dict[str, Any]) -> tuple[bool, str]:
                 logger.debug(reason)
                 return False, reason
         except Exception as e:
-            logger.error("Feasibility rule '%s' raised exception: %s", rule.__name__, e)
+            logger.error("Feasibility rule '{}' raised exception: {}", rule.__name__, e)
             # Continue checking other rules
             continue
 

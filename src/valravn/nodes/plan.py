@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from loguru import logger
 from pydantic import BaseModel
 
 from valravn.core.llm_factory import get_llm
@@ -73,6 +74,7 @@ def _get_llm():
 def plan_investigation(state: dict) -> dict:
     """LangGraph node: derive initial investigation plan from prompt."""
     task = state["task"]
+    logger.info("Node: plan_investigation | prompt={!r}", task.prompt[:80])
     output_dir = Path(state.get("_output_dir", "."))
 
     messages = [

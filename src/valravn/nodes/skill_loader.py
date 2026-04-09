@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from loguru import logger
+
 _SKILLS_BASE = Path.home() / ".claude" / "skills"
 
 SKILL_PATHS: dict[str, Path] = {
@@ -21,6 +23,7 @@ def load_skill(state: dict) -> dict:
     """LangGraph node: load SKILL.md for the current step's domain into skill_cache."""
     step_id = state["current_step_id"]
     step = next(s for s in state["plan"].steps if s.id == step_id)
+    logger.info("Node: load_skill | domain={} step={}", step.skill_domain, step_id[:8])
     domain = step.skill_domain
 
     cache: dict[str, str] = dict(state.get("skill_cache") or {})

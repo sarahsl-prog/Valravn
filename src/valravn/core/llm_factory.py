@@ -83,7 +83,7 @@ def get_llm(
     provider = provider.lower().strip()
     model = model.strip()
 
-    logger.debug("Initializing %s LLM with model %s", provider, model)
+    logger.debug("Initializing {} LLM with model {}", provider, model)
 
     # Create LLM based on provider
     if provider == "anthropic":
