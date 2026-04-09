@@ -3,7 +3,7 @@ retry:
   retry_delay_seconds: 0.0
 
 mlflow:
-  tracking_uri: http://127.0.0.1:5000
+  tracking_uri: http://192.168.0.250:5000
   experiment_name: valravn-evaluation
 
 # =============================================================================
@@ -14,31 +14,31 @@ mlflow:
 models:
   # Investigation planning module
   # Used to generate investigation steps from prompt
-  plan: anthropic:claude-sonnet-4-6
+  plan: ollama:minimax-m2.5:cloud
 
   # Trajectory reflector module (RCL training)
   # Used to diagnose why trajectories fail
-  reflector: anthropic:claude-sonnet-4-6
+  reflector: ollama:minimax-m2.5:cloud
 
   # Playbook mutator module (RCL training)
   # Used to generate playbook mutations
-  mutator: anthropic:claude-sonnet-4-6
+  mutator: ollama:minimax-m2.5:cloud
 
   # Anomaly detection module
   # Used to detect forensic anomalies in tool output
-  anomaly: anthropic:claude-sonnet-4-6
+  anomaly: ollama:minimax-m2.5:cloud
 
   # Conclusions synthesis module
   # Used to synthesize findings from investigation
-  conclusions: anthropic:claude-sonnet-4-6
+  conclusions: ollama:minimax-m2.5:cloud
 
   # Self-assessment module
   # Used to assess investigation progress
-  self_assess: anthropic:claude-sonnet-4-6
+  self_assess: ollama:minimax-m2.5:cloud
 
   # Tool runner correction module
   # Used to correct failed tool commands
-  tool_runner: anthropic:claude-sonnet-4-6
+  tool_runner: ollama:minimax-m2.5:cloud
 
   # Alternative configurations (uncomment to use):
   #
