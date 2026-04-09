@@ -17,6 +17,7 @@ from valravn.state import AgentState
 # FileTracer — writes JSONL to ./analysis/traces/<run_id>.jsonl
 # ---------------------------------------------------------------------------
 
+
 class FileTracer(BaseCallbackHandler):
     def __init__(self, trace_path: Path) -> None:
         super().__init__()
@@ -24,11 +25,13 @@ class FileTracer(BaseCallbackHandler):
         self._path.parent.mkdir(parents=True, exist_ok=True)
 
     def _write(self, event: str, data: dict) -> None:
-        line = json.dumps({
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "event": event,
-            **data,
-        })
+        line = json.dumps(
+            {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "event": event,
+                **data,
+            }
+        )
         with open(self._path, "a") as f:
             f.write(line + "\n")
 
@@ -48,6 +51,7 @@ class FileTracer(BaseCallbackHandler):
 # ---------------------------------------------------------------------------
 # Graph builder
 # ---------------------------------------------------------------------------
+
 
 def _build_graph(checkpointer: SqliteSaver) -> object:
     from valravn.nodes.anomaly import check_anomalies, record_anomaly
@@ -99,12 +103,53 @@ def _build_graph(checkpointer: SqliteSaver) -> object:
     return builder.compile(checkpointer=checkpointer)
 
 
+def _build_success_trace(state: dict) -> str:
+    """Build success trace from completed invocations."""
+    invocations = state.get("invocations", [])
+    lines = []
+    for inv in invocations:
+        if inv.exit_code == 0:
+            lines.append(
+                f"SUCCESS: {' '.join(str(c) for c in inv.cmd)} "
+                f"-> exit_code={inv.exit_code} duration={inv.duration_seconds:.2f}s"
+            )
+    return "\n".join(lines)
+
+
+def _build_failure_trace(state: dict) -> str:
+    """Build failure trace from failed steps."""
+    failures = state.get("_tool_failures", [])
+    lines = []
+    for failure in failures:
+        lines.append(f"FAILURE: step={failure.step_id} error={failure.final_error}")
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
+
 def run(task: InvestigationTask, app_cfg: AppConfig, out_cfg: OutputConfig) -> int:
     """Compile and invoke the investigation graph. Returns exit code (0 or 1)."""
+    import sqlite3
+
+    from loguru import logger
+
+    # Validate output directory is writable
+    output_dir = out_cfg.output_dir.resolve()
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        test_file = output_dir / ".write_test"
+        test_file.touch()
+        test_file.unlink()
+    except (PermissionError, OSError) as e:
+        logger.error("Output directory {} is not writable: {}", output_dir, e)
+        raise ValueError(
+            f"Output directory '{output_dir}' is not writable. "
+            f"Ensure you have write permissions or specify a different path."
+        ) from e
+
     db_path = out_cfg.checkpoints_db
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -143,6 +188,7 @@ def run(task: InvestigationTask, app_cfg: AppConfig, out_cfg: OutputConfig) -> i
         "_detected_anomaly_data": None,
         "_self_assessments": [],
         "_follow_up_steps": [],
+        "_skills_config": app_cfg.skills,
     }
 
     config = {
@@ -151,6 +197,49 @@ def run(task: InvestigationTask, app_cfg: AppConfig, out_cfg: OutputConfig) -> i
     }
 
     final_state = graph.invoke(initial_state, config=config)
+
+    # RCL Integration
+    if app_cfg.training.enabled:
+        from valravn.training.rcl_loop import RCLTrainer
+
+        trainer = RCLTrainer(app_cfg.training.state_dir)
+
+        success_trace = _build_success_trace(final_state)
+        failure_trace = _build_failure_trace(final_state)
+
+        # Only process if we have meaningful data
+        if len(failure_trace) >= app_cfg.training.min_failure_trace_length or success_trace:
+            diagnostic = trainer.process_investigation_result(
+                case_id=task.id,
+                success_trace=success_trace,
+                failure_trace=failure_trace,
+                success=final_state.get("report") and not final_state["report"].tool_failures,
+            )
+
+            if diagnostic:
+                logger.info(
+                    "RCL diagnostic: attribution=%s root_cause=%s",
+                    diagnostic.attribution,
+                    diagnostic.root_cause,
+                )
+
+    # Checkpoint cleanup
+    if app_cfg.checkpoint_cleanup.auto_cleanup:
+        from valravn.checkpoint_cleanup import cleanup_checkpoints
+
+        cleanup_result = cleanup_checkpoints(
+            db_path=out_cfg.checkpoints_db, config=app_cfg.checkpoint_cleanup
+        )
+        if cleanup_result.deleted_count > 0:
+            logger.info("Cleaned up %d old checkpoints", cleanup_result.deleted_count)
+
+        if app_cfg.checkpoint_cleanup.auto_vacuum:
+            import sqlite3
+
+            conn = sqlite3.connect(str(out_cfg.checkpoints_db))
+            conn.execute("VACUUM")
+            conn.close()
+            logger.debug("Vacuumed checkpoint database")
 
     if final_state.get("report"):
         return final_state["report"].exit_code

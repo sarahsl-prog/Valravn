@@ -18,6 +18,43 @@ class RetryConfig(BaseModel):
     timeout_seconds: int = 3600
 
 
+class CheckpointCleanupConfig(BaseModel):
+    """Configuration for SQLite checkpoint database cleanup."""
+
+    retention_days: int = 7
+    max_checkpoints_per_thread: int = 1000
+    min_checkpoints_per_thread: int = 2
+    auto_cleanup: bool = True
+    auto_vacuum: bool = False
+
+
+class TrainingConfig(BaseModel):
+    """Configuration for RCL training system."""
+
+    enabled: bool = False  # Opt-in by default
+    state_dir: Path = Path("./training")
+    min_failure_trace_length: int = 100
+
+
+class SkillsConfig(BaseModel):
+    """Configuration for skill file paths."""
+
+    base_path: Path = Path.home() / ".claude" / "skills"
+
+    def get_skill_path(self, domain: str) -> Path | None:
+        """Get the path to a skill file for a given domain."""
+        known_domains = {
+            "memory-analysis": "memory-analysis/SKILL.md",
+            "sleuthkit": "sleuthkit/SKILL.md",
+            "windows-artifacts": "windows-artifacts/SKILL.md",
+            "plaso-timeline": "plaso-timeline/SKILL.md",
+            "yara-hunting": "yara-hunting/SKILL.md",
+        }
+        if domain not in known_domains:
+            return None
+        return self.base_path / known_domains[domain]
+
+
 class OutputConfig(BaseModel):
     output_dir: Path
 
@@ -53,6 +90,9 @@ class AppConfig(BaseModel):
         "experiment_name": "valravn-evaluation",
     }
     models: dict[str, str | list[str]] = {}
+    checkpoint_cleanup: CheckpointCleanupConfig = CheckpointCleanupConfig()
+    training: TrainingConfig = TrainingConfig()
+    skills: SkillsConfig = SkillsConfig()
 
 
 def load_config(path: Path | None) -> AppConfig:

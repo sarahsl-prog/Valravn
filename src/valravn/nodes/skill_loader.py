@@ -4,15 +4,7 @@ from pathlib import Path
 
 from loguru import logger
 
-_SKILLS_BASE = Path.home() / ".claude" / "skills"
-
-SKILL_PATHS: dict[str, Path] = {
-    "memory-analysis": _SKILLS_BASE / "memory-analysis" / "SKILL.md",
-    "sleuthkit": _SKILLS_BASE / "sleuthkit" / "SKILL.md",
-    "windows-artifacts": _SKILLS_BASE / "windows-artifacts" / "SKILL.md",
-    "plaso-timeline": _SKILLS_BASE / "plaso-timeline" / "SKILL.md",
-    "yara-hunting": _SKILLS_BASE / "yara-hunting" / "SKILL.md",
-}
+from valravn.config import SkillsConfig
 
 
 class SkillNotFoundError(Exception):
@@ -31,13 +23,17 @@ def load_skill(state: dict) -> dict:
     if domain in cache:
         return {"skill_cache": cache}
 
-    if domain not in SKILL_PATHS:
+    # Get skills config from state or use defaults
+    skills_config = state.get("_skills_config")
+    if skills_config is None:
+        skills_config = SkillsConfig()
+
+    skill_path = skills_config.get_skill_path(domain)
+    if skill_path is None:
         raise SkillNotFoundError(
-            f"No skill file registered for domain '{domain}'. "
-            f"Add it to SKILL_PATHS in nodes/skill_loader.py."
+            f"No skill file registered for domain '{domain}'. Add it to SkillsConfig.known_domains."
         )
 
-    skill_path = SKILL_PATHS[domain]
     if not skill_path.exists():
         raise SkillNotFoundError(f"Skill file not found: {skill_path}")
 

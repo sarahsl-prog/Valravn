@@ -5,6 +5,7 @@ from typing import Annotated, Any, TypedDict
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
+from valravn.config import SkillsConfig
 from valravn.models.records import Anomaly, ToolInvocationRecord
 from valravn.models.report import FindingsReport, SelfCorrectionEvent, ToolFailureRecord
 from valravn.models.task import InvestigationPlan, InvestigationTask, PlannedStep
@@ -37,3 +38,4 @@ class AgentState(TypedDict):
     _self_assessments: list[dict]
     _conclusions: list[Any]
     _follow_up_steps: list[PlannedStep]
+    _skills_config: SkillsConfig | None

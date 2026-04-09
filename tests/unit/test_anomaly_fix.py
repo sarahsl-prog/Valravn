@@ -1,4 +1,5 @@
 """Tests for Task 3: Fix Anomaly Response Action and Follow-Up Logic."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -51,7 +52,7 @@ def _make_state(
 
 @patch("valravn.nodes.anomaly._get_anomaly_llm")
 def test_anomaly_response_action_from_llm(mock_llm_fn, tmp_path):
-    """_detected_anomaly_data must contain response_action from LLM result."""
+    """_detected_anomaly_data must contain response_action from LLM result (critical category bypasses trust filter)."""
     stdout_file = tmp_path / "stdout.txt"
     stdout_file.write_text("suspicious output\n")
 
@@ -74,14 +75,20 @@ def test_anomaly_response_action_from_llm(mock_llm_fn, tmp_path):
     )
 
     import json
+
     # Mock LLM returns response_action = "no_follow_up_warranted"
-    mock_response = MagicMock(content=json.dumps({
-        "anomaly_detected": True,
-        "description": "Suspicious absence of expected files",
-        "forensic_significance": "Files may have been wiped",
-        "category": "unexpected_absence",
-        "response_action": "no_follow_up_warranted",
-    }))
+    # Use integrity_failure category which bypasses trust filtering
+    mock_response = MagicMock(
+        content=json.dumps(
+            {
+                "anomaly_detected": True,
+                "description": "MFT hash mismatch detected",
+                "forensic_significance": "Evidence of anti-forensic tampering",
+                "category": "integrity_failure",
+                "response_action": "no_follow_up_warranted",
+            }
+        )
+    )
 
     mock_llm = MagicMock()
     mock_llm.invoke.return_value = mock_response
@@ -206,7 +213,7 @@ def test_record_anomaly_unknown_category_falls_back_to_strings(read_only_evidenc
 
 
 def test_record_anomaly_orphaned_relationship_uses_vol3(read_only_evidence, output_dir):
-    """orphaned_relationship category must produce a vol3 memory-analysis follow-up."""
+    """orphaned_relationship category must produce a vol.py memory-analysis follow-up."""
     detected_data = {
         "anomaly_detected": True,
         "description": "Process with no valid parent",
@@ -222,4 +229,5 @@ def test_record_anomaly_orphaned_relationship_uses_vol3(read_only_evidence, outp
     assert len(result["_follow_up_steps"]) > 0
     follow_up: PlannedStep = result["_follow_up_steps"][0]
     assert follow_up.skill_domain == "memory-analysis"
-    assert follow_up.tool_cmd[0] == "vol3"
+    assert follow_up.tool_cmd[0] == "python3"
+    assert "/opt/volatility3-2.20.0/vol.py" in follow_up.tool_cmd

@@ -70,16 +70,13 @@ def test_investigation_task_accepts_multiple_evidence(tmp_path):
         ev.write_bytes(b"x")
         os.chmod(ev, 0o444)
 
-    task = InvestigationTask(
-        prompt="test",
-        evidence_refs=[str(ev1), str(ev2), str(ev3)]
-    )
+    task = InvestigationTask(prompt="test", evidence_refs=[str(ev1), str(ev2), str(ev3)])
     assert len(task.evidence_refs) == 3
     assert task.id
 
 
-def test_investigation_task_rejects_multiple_mixed_evidence(tmp_path):
-    """InvestigationTask rejects when any evidence is writable."""
+def test_investigation_task_rejects_any_writable_evidence(tmp_path):
+    """InvestigationTask rejects when any evidence path is writable."""
     ev1 = tmp_path / "ev1.raw"
     ev2 = tmp_path / "ev2.raw"
     ev1.write_bytes(b"x")

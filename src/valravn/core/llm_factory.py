@@ -24,13 +24,13 @@ from loguru import logger
 # Default model chains per module — tried in order on failure.
 # A single string is also valid (no fallback).
 DEFAULT_MODELS: dict[str, list[str]] = {
-    "anomaly": ["ollama:minimax-m2.5:cloud"],
-    "conclusions": ["ollama:minimax-m2.5:cloud"],
-    "plan": ["ollama:minimax-m2.5:cloud"],
-    "self_assess": ["ollama:minimax-m2.5:cloud"],
-    "tool_runner": ["ollama:minimax-m2.5:cloud"],
-    "reflector": ["ollama:minimax-m2.5:cloud"],
-    "mutator": ["ollama:minimax-m2.5:cloud"],
+    "anomaly": ["ollama:kimi-k2.5:cloud", "ollama:qwen3:14b"],
+    "conclusions": ["ollama:kimi-k2.5:cloud", "ollama:qwen3:14b"],
+    "plan": ["ollama:kimi-k2.5:cloud", "ollama:qwen3:14b"],
+    "self_assess": ["ollama:kimi-k2.5:cloud", "ollama:qwen3:14b"],
+    "tool_runner": ["ollama:kimi-k2.5:cloud", "ollama:qwen3:14b"],
+    "reflector": ["ollama:kimi-k2.5:cloud", "ollama:qwen3:14b"],
+    "mutator": ["ollama:kimi-k2.5:cloud", "ollama:qwen3:14b"],
 }
 
 
@@ -135,8 +135,7 @@ def _create_llm_for(provider_model: str, temperature: float) -> object:
         return _create_openrouter_llm(model, temperature)
     else:
         raise ValueError(
-            f"Unsupported provider: {provider!r}. "
-            f"Supported: anthropic, openai, ollama, openrouter"
+            f"Unsupported provider: {provider!r}. Supported: anthropic, openai, ollama, openrouter"
         )
 
 

@@ -18,68 +18,94 @@ mlflow:
 # Environment variable override: VALRAVN_{MODULE}_MODEL
 #   - Single model:  VALRAVN_PLAN_MODEL=anthropic:claude-sonnet-4-6
 #   - Overrides the entire chain with one model (useful for debugging)
+#
+# Ollama Configuration:
+#   - Set OLLAMA_BASE_URL to point to your Ollama server (default: http://localhost:11434)
+#   - Example: OLLAMA_BASE_URL=http://192.168.0.250:11434
 # =============================================================================
 models:
   plan:
-    - ollama:minimax-m2.5:cloud
-    - ollama:gemma3:27b
-    - anthropic:claude-sonnet-4-6
+    - ollama:kimi-k2.5:cloud
     - ollama:qwen3:14b
 
   reflector:
-    - ollama:minimax-m2.5:cloud
-    - ollama:gemma3:27b
-    - anthropic:claude-sonnet-4-6
+    - ollama:kimi-k2.5:cloud
     - ollama:qwen3:14b
 
   mutator:
-    - ollama:minimax-m2.5:cloud
-    - ollama:gemma3:27b
-    - anthropic:claude-sonnet-4-6
+    - ollama:kimi-k2.5:cloud
     - ollama:qwen3:14b
 
   anomaly:
-    - ollama:minimax-m2.5:cloud
-    - ollama:gemma3:27b
-    - anthropic:claude-sonnet-4-6
+    - ollama:kimi-k2.5:cloud
     - ollama:qwen3:14b
 
   conclusions:
-    - ollama:minimax-m2.5:cloud
-    - ollama:gemma3:27b
-    - anthropic:claude-sonnet-4-6
+    - ollama:kimi-k2.5:cloud
     - ollama:qwen3:14b
 
   self_assess:
-    - ollama:minimax-m2.5:cloud
-    - ollama:gemma3:27b
-    - anthropic:claude-sonnet-4-6
+    - ollama:kimi-k2.5:cloud
     - ollama:qwen3:14b
 
   tool_runner:
-    - ollama:minimax-m2.5:cloud
-    - ollama:gemma3:27b
-    - anthropic:claude-sonnet-4-6
+    - ollama:kimi-k2.5:cloud
     - ollama:qwen3:14b
+
+# =============================================================================
+# RCL TRAINING SYSTEM (Reflection-Calibration-Learning)
+# Enable to allow Valravn to learn from investigation failures and improve
+# its forensic playbooks over time.
+#
+# IMPORTANT: This is OPT-IN. Set enabled: true to activate.
+# =============================================================================
+training:
+  # Set to true to enable RCL training (default: false)
+  enabled: false
+
+  # Directory to store training state (playbook, replay buffer, etc.)
+  state_dir: ./training
+
+  # Minimum length of failure trace to process (in characters)
+  # Prevents training on trivial failures
+  min_failure_trace_length: 100
+
+# =============================================================================
+# SKILL PATHS CONFIGURATION
+# Location of forensic skill files (SKILL.md)
+# =============================================================================
+skills:
+  # Base directory for skill files
+  # Each skill domain should have a subdirectory with SKILL.md
+  # Example: ~/.claude/skills/memory-analysis/SKILL.md
+  base_path: ~/.claude/skills
 
 # =============================================================================
 # CHECKPOINT CLEANUP POLICY (Q6)
 # SQLite checkpoint database grows with each investigation.
 # Configure automatic cleanup to prevent unbounded growth.
+#
+# AUDIT MODE: To preserve all checkpoints for auditing:
+#   - Set auto_cleanup: false
+#   - Or use very high retention_days (e.g., 3650 for 10 years)
 # =============================================================================
 checkpoint_cleanup:
   # Delete checkpoints older than this many days (default: 7)
+  # For audit mode, set to a very high value or disable auto_cleanup
   retention_days: 7
 
   # Keep at most this many checkpoints per investigation thread (default: 1000)
-  max_checkpoints_per_thread: 100
+  max_checkpoints_per_thread: 1000
 
   # Never delete below this many checkpoints per thread (default: 2)
   # This ensures you can always resume even after aggressive cleanup
   min_checkpoints_per_thread: 2
 
-  # Automatically run cleanup after each investigation completes
+  # Automatically run cleanup after each investigation completes (default: true)
+  # Set to false for audit mode to preserve all checkpoints
   auto_cleanup: true
 
-  # Vacuum database after cleanup to reclaim disk space
-  auto_vacuum: false  # Set to true if disk space is a concern (slower cleanup)
+  # Vacuum database after cleanup to reclaim disk space (default: false)
+  # Set to true if disk space is a concern (slower cleanup)
+  # Recommended for long-running production deployments
+  auto_vacuum: false

@@ -7,6 +7,7 @@ retention policies and manual cleanup utilities.
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
@@ -19,16 +20,25 @@ DEFAULT_RETENTION_DAYS = 7
 DEFAULT_MAX_CHECKPOINTS = 1000
 
 
+@dataclass
+class CleanupResult:
+    """Result of a checkpoint cleanup operation."""
+
+    deleted_count: int
+    deleted_by_age: int = 0
+    deleted_by_count: int = 0
+
+
 class CheckpointCleanupPolicy:
     """Configuration for checkpoint cleanup behavior.
-    
+
     Supports two retention strategies:
     1. Time-based: Delete checkpoints older than retention_days
     2. Count-based: Keep only the N most recent checkpoints per thread
-    
+
     The more restrictive of the two policies is applied.
     """
-    
+
     def __init__(
         self,
         retention_days: int = DEFAULT_RETENTION_DAYS,
@@ -36,7 +46,7 @@ class CheckpointCleanupPolicy:
         min_checkpoints_per_thread: int = 2,
     ):
         """Initialize cleanup policy.
-        
+
         Args:
             retention_days: Delete checkpoints older than this many days
             max_checkpoints_per_thread: Keep at most this many checkpoints per thread
@@ -45,44 +55,42 @@ class CheckpointCleanupPolicy:
         self.retention_days = retention_days
         self.max_checkpoints_per_thread = max_checkpoints_per_thread
         self.min_checkpoints_per_thread = min_checkpoints_per_thread
-    
-    def cleanup(self, db_path: Path) -> dict[str, int]:
+
+    def cleanup(self, db_path: Path) -> CleanupResult:
         """Apply cleanup policy to a checkpoint database.
-        
+
         Args:
             db_path: Path to the SQLite checkpoint database
-            
+
         Returns:
-            Dict with cleanup statistics:
-                - deleted_by_age: Number of old checkpoints removed
-                - deleted_by_count: Number of excess checkpoints removed
-                - total_deleted: Total checkpoints removed
+            CleanupResult with deletion statistics
         """
         if not db_path.exists():
-            return {"deleted_by_age": 0, "deleted_by_count": 0, "total_deleted": 0}
-        
-        stats = {"deleted_by_age": 0, "deleted_by_count": 0}
-        
+            return CleanupResult(deleted_count=0)
+
+        deleted_by_age = 0
+        deleted_by_count = 0
+
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
-            
+
             # Clean up by age
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.retention_days)
             cutoff_iso = cutoff_date.isoformat()
-            
+
             cursor.execute(
                 """
                 DELETE FROM checkpoints
                 WHERE created_at < ?
                 """,
-                (cutoff_iso,)
+                (cutoff_iso,),
             )
-            stats["deleted_by_age"] = cursor.rowcount
-            
+            deleted_by_age = cursor.rowcount
+
             # Clean up by count per thread (keep only recent MAX)
             cursor.execute("SELECT DISTINCT thread_id FROM checkpoints")
             threads = cursor.fetchall()
-            
+
             for (thread_id,) in threads:
                 cursor.execute(
                     """
@@ -94,46 +102,52 @@ class CheckpointCleanupPolicy:
                         LIMIT ?
                     )
                     """,
-                    (thread_id, thread_id, self.max_checkpoints_per_thread)
+                    (thread_id, thread_id, self.max_checkpoints_per_thread),
                 )
-                stats["deleted_by_count"] += cursor.rowcount
-            
+                deleted_by_count += cursor.rowcount
+
             # Apply minimum retention (ensure at least min_checkpoints remain)
             cursor.execute("SELECT DISTINCT thread_id FROM checkpoints")
             threads = cursor.fetchall()
-            
+
             for (thread_id,) in threads:
                 cursor.execute(
                     """
                     SELECT COUNT(*) FROM checkpoints
                     WHERE thread_id = ?
                     """,
-                    (thread_id,)
+                    (thread_id,),
                 )
                 count = cursor.fetchone()[0]
-                
+
                 if count < self.min_checkpoints_per_thread:
                     # Restore from deleted or log warning
                     logger.warning(
                         "Thread %r has only %d checkpoints (min: %d)",
-                        thread_id, count, self.min_checkpoints_per_thread
+                        thread_id,
+                        count,
+                        self.min_checkpoints_per_thread,
                     )
-            
+
             conn.commit()
-        
-        stats["total_deleted"] = stats["deleted_by_age"] + stats["deleted_by_count"]
+
+        total_deleted = deleted_by_age + deleted_by_count
         logger.info(
             "Checkpoint cleanup complete: %d deleted (%d by age, %d by count)",
-            stats["total_deleted"],
-            stats["deleted_by_age"],
-            stats["deleted_by_count"]
+            total_deleted,
+            deleted_by_age,
+            deleted_by_count,
         )
-        
-        return stats
-    
+
+        return CleanupResult(
+            deleted_count=total_deleted,
+            deleted_by_age=deleted_by_age,
+            deleted_by_count=deleted_by_count,
+        )
+
     def get_stats(self, db_path: Path) -> dict:
         """Get checkpoint database statistics.
-        
+
         Returns:
             Dict with:
                 - total_checkpoints: Total checkpoint records
@@ -150,22 +164,20 @@ class CheckpointCleanupPolicy:
                 "newest_checkpoint": None,
                 "db_size_bytes": 0,
             }
-        
+
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
-            
+
             # Get checkpoint counts
             cursor.execute("SELECT COUNT(*) FROM checkpoints")
             total = cursor.fetchone()[0]
-            
+
             cursor.execute("SELECT COUNT(DISTINCT thread_id) FROM checkpoints")
             threads = cursor.fetchone()[0]
-            
-            cursor.execute(
-                "SELECT MIN(created_at), MAX(created_at) FROM checkpoints"
-            )
+
+            cursor.execute("SELECT MIN(created_at), MAX(created_at) FROM checkpoints")
             oldest, newest = cursor.fetchone()
-        
+
         return {
             "total_checkpoints": total,
             "unique_threads": threads,
@@ -177,35 +189,49 @@ class CheckpointCleanupPolicy:
 
 def cleanup_checkpoints(
     db_path: Path,
-    retention_days: int = DEFAULT_RETENTION_DAYS,
-    max_checkpoints: int = DEFAULT_MAX_CHECKPOINTS,
-) -> dict[str, int]:
+    retention_days: int | None = None,
+    max_checkpoints: int | None = None,
+    config: "CheckpointCleanupConfig | None" = None,
+) -> CleanupResult:
     """Simple cleanup: remove old checkpoints following retention policy.
-    
+
     Args:
         db_path: Path to checkpoint database
-        retention_days: Delete checkpoints older than this
-        max_checkpoints: Keep at most this many per thread
-        
+        retention_days: Delete checkpoints older than this (deprecated, use config)
+        max_checkpoints: Keep at most this many per thread (deprecated, use config)
+        config: CheckpointCleanupConfig object (preferred)
+
     Returns:
-        Cleanup statistics dict
+        CleanupResult with deletion statistics
     """
-    policy = CheckpointCleanupPolicy(
-        retention_days=retention_days,
-        max_checkpoints_per_thread=max_checkpoints
-    )
+    # Support both old-style parameters and new config object
+    if config is not None:
+        from valravn.config import CheckpointCleanupConfig
+
+        policy = CheckpointCleanupPolicy(
+            retention_days=config.retention_days,
+            max_checkpoints_per_thread=config.max_checkpoints_per_thread,
+            min_checkpoints_per_thread=config.min_checkpoints_per_thread,
+        )
+    else:
+        # Use deprecated parameters
+        policy = CheckpointCleanupPolicy(
+            retention_days=retention_days or DEFAULT_RETENTION_DAYS,
+            max_checkpoints_per_thread=max_checkpoints or DEFAULT_MAX_CHECKPOINTS,
+        )
+
     return policy.cleanup(db_path)
 
 
 def vacuum_db(db_path: Path) -> None:
     """Run VACUUM on the checkpoint database to reclaim space.
-    
+
     Warning: This rewrite the entire database and requires temporary disk space.
     """
     if not db_path.exists():
         return
-    
+
     with sqlite3.connect(db_path) as conn:
         conn.execute("VACUUM")
-    
+
     logger.info("Vacuumed checkpoint database: {}", db_path)

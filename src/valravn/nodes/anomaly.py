@@ -49,7 +49,13 @@ _FOLLOW_UP_COMMANDS: dict[str, dict] = {
     },
     "orphaned_relationship": {
         "skill_domain": "memory-analysis",
-        "tool_cmd_template": ["vol3", "-f", "{evidence}", "pstree"],
+        "tool_cmd_template": [
+            "python3",
+            "/opt/volatility3-2.20.0/vol.py",
+            "-f",
+            "{evidence}",
+            "windows.pstree.PsTree",
+        ],
     },
     "cross_tool_conflict": {
         "skill_domain": "sleuthkit",
@@ -73,9 +79,69 @@ def _get_anomaly_llm():
 
 def check_anomalies(state: dict) -> dict:
     """LangGraph node: inspect the most recent tool output for forensic anomalies."""
+    from valravn.training.self_guide import trust_coefficient
+    from valravn.models.task import StepStatus
+
     invocations = state.get("invocations") or []
     if not invocations:
         return {"_pending_anomalies": False, "_detected_anomaly_data": None}
+
+    invocation = invocations[-1]
+
+    # Calculate trust coefficient based on investigation progress
+    plan = state.get("plan")
+    if plan and len(plan.steps) > 0:
+        completed = sum(1 for s in plan.steps if s.status != StepStatus.PENDING)
+        trust = trust_coefficient(completed, len(plan.steps))
+    else:
+        trust = 0.0
+
+    MAX_TOOL_OUTPUT_BYTES = 50_000
+    stdout_path = Path(invocation.stdout_path)
+    raw = stdout_path.read_text(errors="replace") if stdout_path.exists() else ""
+    tool_output = raw[:MAX_TOOL_OUTPUT_BYTES]
+
+    messages = [
+        SystemMessage(content=_SYSTEM_PROMPT),
+        HumanMessage(
+            content=(
+                f"Tool command: {' '.join(str(c) for c in invocation.cmd)}\n\n"
+                f"Tool output:\n{tool_output}"
+            )
+        ),
+    ]
+
+    # Anomaly checking is non-critical. If the LLM call fails, log and
+    # continue the investigation rather than crashing the graph.
+    try:
+        response = _get_anomaly_llm().invoke(messages)
+        result: _AnomalyCheckResult = parse_llm_json(response.content, _AnomalyCheckResult)
+    except Exception:
+        from loguru import logger
+
+        logger.warning("Anomaly-check LLM failed; skipping anomaly detection for this step")
+        return {"_pending_anomalies": False, "_detected_anomaly_data": None}
+
+    if result.anomaly_detected:
+        # Trust-based filtering: require higher confidence when trust is low
+        # This prevents premature anomaly chasing early in the investigation
+        if trust < 0.3 and result.category not in ["integrity_failure"]:
+            from loguru import logger
+
+            logger.debug(
+                "Low trust ({:.2f}) filtered {} anomaly (significance: {})",
+                trust,
+                result.category,
+                result.forensic_significance,
+            )
+            return {"_pending_anomalies": False, "_detected_anomaly_data": None}
+
+        return {
+            "_pending_anomalies": True,
+            "_detected_anomaly_data": result.model_dump(),
+        }
+
+    return {"_pending_anomalies": False, "_detected_anomaly_data": None}
 
     invocation = invocations[-1]
 
@@ -101,6 +167,7 @@ def check_anomalies(state: dict) -> dict:
         result: _AnomalyCheckResult = parse_llm_json(response.content, _AnomalyCheckResult)
     except Exception:
         from loguru import logger
+
         logger.warning("Anomaly-check LLM failed; skipping anomaly detection for this step")
         return {"_pending_anomalies": False, "_detected_anomaly_data": None}
 
@@ -162,11 +229,16 @@ def record_anomaly(state: dict) -> dict:
         evidence_path = evidence_refs[0] if evidence_refs else "/evidence"
 
         # Count existing anomaly follow-up steps to prevent runaway depth
-        follow_up_count = sum(
-            1 for s in plan.steps
-            if s.rationale.startswith("Follow-up investigation of anomaly")
-            and s.status == StepStatus.PENDING
-        ) if plan is not None else 0
+        follow_up_count = (
+            sum(
+                1
+                for s in plan.steps
+                if s.rationale.startswith("Follow-up investigation of anomaly")
+                and s.status == StepStatus.PENDING
+            )
+            if plan is not None
+            else 0
+        )
 
         if follow_up_count < 3:
             # Use context-aware follow-up command based on anomaly category.

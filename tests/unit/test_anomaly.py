@@ -85,13 +85,18 @@ def test_check_anomalies_none_detected(read_only_evidence, output_dir, tmp_path)
     invocation = _make_invocation(stdout_file)
 
     import json
-    mock_response = MagicMock(content=json.dumps({
-        "anomaly_detected": False,
-        "description": "",
-        "forensic_significance": "",
-        "category": "",
-        "response_action": "no_follow_up_warranted",
-    }))
+
+    mock_response = MagicMock(
+        content=json.dumps(
+            {
+                "anomaly_detected": False,
+                "description": "",
+                "forensic_significance": "",
+                "category": "",
+                "response_action": "no_follow_up_warranted",
+            }
+        )
+    )
 
     state = _base_state(read_only_evidence, output_dir, invocations=[invocation])
 
@@ -107,22 +112,27 @@ def test_check_anomalies_none_detected(read_only_evidence, output_dir, tmp_path)
 
 
 def test_check_anomalies_detected(read_only_evidence, output_dir, tmp_path):
-    """When LLM reports an anomaly, node returns _pending_anomalies: True with data."""
+    """When LLM reports a critical anomaly, node returns _pending_anomalies: True with data."""
     stdout_file = tmp_path / "stdout.txt"
     stdout_file.write_text("suspicious: process pid=1234 ppid=0 name=cmd.exe\n")
 
-    invocation = _make_invocation(stdout_file, cmd=["python3", "/opt/volatility3-2.20.0/vol.py",
-                                                     "windows.pstree"])
+    invocation = _make_invocation(
+        stdout_file, cmd=["python3", "/opt/volatility3-2.20.0/vol.py", "windows.pstree"]
+    )
 
+    # Use integrity_failure category which bypasses trust filtering
     anomaly_dump = {
         "anomaly_detected": True,
-        "description": "cmd.exe with no parent process",
-        "forensic_significance": "Possible hollow process or direct kernel injection",
-        "category": "orphaned_relationship",
+        "description": "MFT hash mismatch detected",
+        "forensic_significance": "Evidence of anti-forensic tampering",
+        "category": "integrity_failure",
     }
 
     import json
-    mock_response = MagicMock(content=json.dumps({**anomaly_dump, "response_action": "no_follow_up_warranted"}))
+
+    mock_response = MagicMock(
+        content=json.dumps({**anomaly_dump, "response_action": "no_follow_up_warranted"})
+    )
 
     state = _base_state(read_only_evidence, output_dir, invocations=[invocation])
 
@@ -135,7 +145,44 @@ def test_check_anomalies_detected(read_only_evidence, output_dir, tmp_path):
 
     assert result["_pending_anomalies"] is True
     assert result["_detected_anomaly_data"] is not None
-    assert result["_detected_anomaly_data"]["category"] == "orphaned_relationship"
+    assert result["_detected_anomaly_data"]["category"] == "integrity_failure"
+
+
+def test_check_anomalies_filtered_by_low_trust(read_only_evidence, output_dir, tmp_path):
+    """Low trust filters non-critical anomalies at start of investigation."""
+    stdout_file = tmp_path / "stdout.txt"
+    stdout_file.write_text("suspicious: process pid=1234 ppid=0 name=cmd.exe\n")
+
+    invocation = _make_invocation(
+        stdout_file, cmd=["python3", "/opt/volatility3-2.20.0/vol.py", "windows.pstree"]
+    )
+
+    # Non-critical anomaly should be filtered when trust is 0
+    anomaly_dump = {
+        "anomaly_detected": True,
+        "description": "cmd.exe with no parent process",
+        "forensic_significance": "Possible hollow process or direct kernel injection",
+        "category": "orphaned_relationship",
+    }
+
+    import json
+
+    mock_response = MagicMock(
+        content=json.dumps({**anomaly_dump, "response_action": "no_follow_up_warranted"})
+    )
+
+    state = _base_state(read_only_evidence, output_dir, invocations=[invocation])
+
+    with patch("valravn.nodes.anomaly._get_anomaly_llm") as mock_llm_fn:
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = mock_response
+        mock_llm_fn.return_value = mock_llm
+
+        result = check_anomalies(state)
+
+    # Should be filtered due to low trust and non-critical category
+    assert result["_pending_anomalies"] is False
+    assert result["_detected_anomaly_data"] is None
 
 
 # ---------------------------------------------------------------------------

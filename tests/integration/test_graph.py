@@ -7,6 +7,7 @@ Runs the full LangGraph pipeline with:
   - Real subprocess.run for the tool step (strings is available on SIFT/Ubuntu)
   - Real write_findings_report producing a Markdown report
 """
+
 from __future__ import annotations
 
 import os
@@ -15,6 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import valravn.config
 from valravn.config import AppConfig, OutputConfig, RetryConfig
 from valravn.models.task import InvestigationTask
 from valravn.nodes.anomaly import _AnomalyCheckResult
@@ -72,7 +74,9 @@ def test_us1_end_to_end(tmp_path: Path) -> None:
     with (
         patch("valravn.nodes.plan._get_llm", return_value=mock_plan_llm),
         patch("valravn.nodes.anomaly._get_anomaly_llm", return_value=mock_anomaly_llm),
-        patch("valravn.nodes.skill_loader.SKILL_PATHS", patched_skill_paths),
+        patch.object(
+            valravn.config.SkillsConfig, "get_skill_path", lambda self, domain: skill_file
+        ),
     ):
         import valravn.graph as graph_mod
 

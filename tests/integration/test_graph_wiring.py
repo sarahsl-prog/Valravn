@@ -164,15 +164,13 @@ class TestGraphConditionalRouting:
             mock_step.tool_cmd = ["echo", "test"]
             mock_step.rationale = "test"
             mock_step.id = "test-step-id"
-            mock_plan_llm.return_value.invoke.return_value = MagicMock(
-                steps=[mock_step]
-            )
+            mock_plan_llm.return_value.invoke.return_value = MagicMock(steps=[mock_step])
             mock_subprocess.return_value = MagicMock(returncode=0, stdout="output", stderr="")
-            mock_anomaly_llm.return_value.invoke.return_value = MagicMock(
-                anomaly_detected=False
-            )
+            mock_anomaly_llm.return_value.invoke.return_value = MagicMock(anomaly_detected=False)
 
-            with patch("valravn.nodes.skill_loader.SKILL_PATHS", {"sleuthkit": Path("/dev/null")}):
+            with patch(
+                "valravn.config.SkillsConfig.get_skill_path", lambda self, domain: Path("/dev/null")
+            ):
                 exit_code = graph_run(task, app_cfg, out_cfg)
                 assert exit_code in (0, 1)
 

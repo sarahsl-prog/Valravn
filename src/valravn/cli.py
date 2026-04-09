@@ -36,6 +36,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("."),
         help="Working directory for analysis/, reports/",
     )
+    inv.add_argument(
+        "--skip-tool-check",
+        action="store_true",
+        help="Skip forensic tool availability check (not recommended)",
+    )
+
+    # Tool check command
+    check = sub.add_parser("check-tools", help="Verify forensic tools are available")
+    check.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Show detailed tool paths",
+    )
+
     return p
 
 
@@ -43,9 +58,13 @@ def _configure_logging() -> None:
     """Configure loguru from LOG_LEVEL env var (set in .env or shell)."""
     level = os.getenv("LOG_LEVEL", "WARNING").upper()
     logger.remove()  # remove default stderr sink
-    logger.add(sys.stderr, level=level, colorize=True,
-               format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | "
-                      "<cyan>{name}</cyan> - <level>{message}</level>")
+    logger.add(
+        sys.stderr,
+        level=level,
+        colorize=True,
+        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | "
+        "<cyan>{name}</cyan> - <level>{message}</level>",
+    )
 
 
 def main() -> None:

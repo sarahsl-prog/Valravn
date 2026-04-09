@@ -12,10 +12,13 @@ POLARITY_REWARD_MAP: dict[str, float] = {
     "negative": -0.1,
 }
 
+__all__ = ["POLARITY_REWARD_MAP", "SelfGuidanceSignal", "trust_coefficient"]
+
 
 # ---------------------------------------------------------------------------
 # Data model
 # ---------------------------------------------------------------------------
+
 
 class SelfGuidanceSignal(BaseModel):
     assessment: str
@@ -26,6 +29,7 @@ class SelfGuidanceSignal(BaseModel):
 # ---------------------------------------------------------------------------
 # Trust schedule
 # ---------------------------------------------------------------------------
+
 
 def trust_coefficient(step: int, total_steps: int) -> float:
     """Return a scalar in [0, 1] controlling self-assessment weight.
