@@ -9,6 +9,7 @@ from valravn.training.reflector import ReflectionDiagnostic, reflect_on_trajecto
 
 def test_reflector_produces_structured_diagnostic():
     """reflect_on_trajectory returns a ReflectionDiagnostic with actionable_gap attribution."""
+    import json
     mock_result = ReflectionDiagnostic(
         attribution="actionable_gap",
         root_cause="Agent failed to run hash verification step before moving to analysis",
@@ -17,7 +18,7 @@ def test_reflector_produces_structured_diagnostic():
 
     with patch("valravn.training.reflector._get_reflector_llm") as mock_llm_fn:
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_result
+        mock_llm.invoke.return_value = MagicMock(content=json.dumps(mock_result.model_dump()))
         mock_llm_fn.return_value = mock_llm
 
         result = reflect_on_trajectory(
@@ -36,6 +37,7 @@ def test_reflector_produces_structured_diagnostic():
 
 def test_reflector_intractable_attribution():
     """reflect_on_trajectory with intractable attribution has empty coverage_gap."""
+    import json
     mock_result = ReflectionDiagnostic(
         attribution="intractable",
         root_cause="Evidence is encrypted and cannot be processed without decryption key",
@@ -44,7 +46,7 @@ def test_reflector_intractable_attribution():
 
     with patch("valravn.training.reflector._get_reflector_llm") as mock_llm_fn:
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_result
+        mock_llm.invoke.return_value = MagicMock(content=json.dumps(mock_result.model_dump()))
         mock_llm_fn.return_value = mock_llm
 
         result = reflect_on_trajectory(

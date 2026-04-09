@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import os
 import subprocess
+import sys
 import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from loguru import logger
 from pydantic import BaseModel
 
 from valravn.core.llm_factory import get_llm
+from valravn.core.parsing import parse_llm_json
 
 from valravn.models.records import ToolInvocationRecord
 from valravn.models.report import SelfCorrectionEvent, ToolFailureRecord
@@ -20,8 +24,26 @@ class _CorrectionSpec(BaseModel):
 
 
 def _get_correction_llm():
-    """Get LLM for tool command correction with structured output."""
-    return get_llm(module="tool_runner", output_schema=_CorrectionSpec)
+    """Get LLM for tool command correction."""
+    return get_llm(module="tool_runner")
+
+
+_CORRECTION_CONTEXT = """\
+You are correcting a forensic tool command on a SANS SIFT Ubuntu workstation.
+Key tool syntax rules:
+
+log2timeline.py (Plaso 20240308):
+  ALL flags must come before the source path. Source path is the LAST argument.
+  ONLY use flags from `log2timeline.py --help`. Do NOT invent flags.
+  Non-existent flags (will error): --log2timeline-mode, --mode, --output, --format, --output-format
+  CORRECT: log2timeline.py --storage-file ./analysis/out.plaso --parsers win10 --timezone UTC /mnt/ewf/ewf1
+  WRONG:   log2timeline.py /mnt/ewf/ewf1 --storage-file ./analysis/out.plaso
+
+fls: fls [-r] [-m /] <image_or_device>
+icat: icat <image_or_device> <inode>
+vol.py: python3 /opt/volatility3-2.20.0/vol.py -f <image> <plugin>
+yara: /usr/local/bin/yara [-r] <rules.yar> <target>
+"""
 
 
 def _request_correction(
@@ -30,17 +52,81 @@ def _request_correction(
     original_cmd: list[str],
     exit_code: int,
     stderr: str,
+    analysis_dir: Path | None = None,
 ) -> _CorrectionSpec:
+    output_note = (
+        f"ALL output files must go to: {analysis_dir}\n"
+        if analysis_dir else ""
+    )
     prompt = (
+        f"{_CORRECTION_CONTEXT}\n"
+        f"{output_note}"
         f"A forensic tool invocation failed on attempt {attempt_number}.\n\n"
         f"Original command: {original_cmd}\n"
         f"Exit code: {exit_code}\n"
         f"Stderr output:\n{stderr}\n\n"
-        "Produce a corrected argv list that will resolve the failure. "
-        "Return only the corrected command and your rationale."
+        "Produce a corrected argv list that will resolve the failure.\n"
+        "Respond with valid JSON only — no markdown, no prose outside the JSON object.\n"
+        'Output exactly: {"corrected_cmd": ["<executable>", "<arg1>", ...], "rationale": "<why>"}'
     )
     llm = _get_correction_llm()
-    return llm.invoke(prompt)
+    response = llm.invoke(prompt)
+    return parse_llm_json(response.content, _CorrectionSpec)
+
+
+def _run_with_streaming(
+    cmd: list[str],
+    stdout_path: Path,
+    stderr_path: Path,
+    timeout_seconds: int,
+) -> tuple[int, bool]:
+    """Run a subprocess with real-time stderr streaming to the terminal.
+
+    Stdout is written directly to file (forensic output, often large).
+    Stderr is streamed to both a file and the terminal so progress bars
+    and status lines from tools like log2timeline.py are visible.
+
+    Returns:
+        (returncode, had_stdout) tuple.
+
+    Raises:
+        subprocess.TimeoutExpired: if the process exceeds timeout_seconds.
+    """
+    with open(stdout_path, "w") as stdout_f, open(stderr_path, "wb") as stderr_f:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=stdout_f,
+            stderr=subprocess.PIPE,
+        )
+
+        # Stream stderr to file + terminal in real-time.
+        # Use os.read() on the raw fd so we get whatever bytes are available
+        # immediately — this keeps progress bars and \r-based status lines
+        # responsive rather than buffering until a newline.
+        fd = proc.stderr.fileno()
+        deadline = time.monotonic() + timeout_seconds
+
+        while True:
+            if time.monotonic() > deadline:
+                proc.kill()
+                proc.wait()
+                raise subprocess.TimeoutExpired(cmd, timeout_seconds)
+
+            try:
+                chunk = os.read(fd, 4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+
+            stderr_f.write(chunk)
+            sys.stderr.buffer.write(chunk)
+            sys.stderr.buffer.flush()
+
+        proc.wait()
+
+    had_stdout = stdout_path.stat().st_size > 0
+    return proc.returncode, had_stdout
 
 
 def _run_single_attempt(
@@ -57,39 +143,40 @@ def _run_single_attempt(
     t0 = time.monotonic()
 
     try:
-        proc = subprocess.run(
-            step.tool_cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
+        returncode, had_stdout = _run_with_streaming(
+            step.tool_cmd, stdout_path, stderr_path, timeout_seconds,
         )
-    except subprocess.TimeoutExpired as e:
-        # Build a synthetic failed process result
-        proc = subprocess.CompletedProcess(
-            args=step.tool_cmd,
-            returncode=-1,
-            stdout=e.output.decode() if e.output else "",
-            stderr=f"Tool timed out after {timeout_seconds}s",
-        )
+    except subprocess.TimeoutExpired:
+        stderr_path.write_text(f"Tool timed out after {timeout_seconds}s")
+        if not stdout_path.exists():
+            stdout_path.write_text("")
+        returncode = -1
+        had_stdout = False
 
     duration = time.monotonic() - t0
     completed = datetime.now(timezone.utc)
 
-    stdout_path.write_text(proc.stdout)
-    stderr_path.write_text(proc.stderr)
+    # Read back stderr for the CompletedProcess (used by correction logic)
+    stderr_text = stderr_path.read_text(errors="replace") if stderr_path.exists() else ""
+    proc = subprocess.CompletedProcess(
+        args=step.tool_cmd,
+        returncode=returncode,
+        stdout="",  # stdout is on disk, not in memory
+        stderr=stderr_text,
+    )
 
     rec = ToolInvocationRecord(
         id=inv_id,
         step_id=step_id,
         attempt_number=len(step.invocation_ids) + 1,
         cmd=step.tool_cmd,
-        exit_code=proc.returncode,
+        exit_code=returncode,
         stdout_path=stdout_path,
         stderr_path=stderr_path,
         started_at_utc=started,
         completed_at_utc=completed,
         duration_seconds=duration,
-        had_output=bool(proc.stdout.strip()),
+        had_output=had_stdout,
     )
 
     rec_path = analysis_dir / f"{inv_id}.record.json"
@@ -103,6 +190,7 @@ def run_forensic_tool(state: dict) -> dict:
     plan = state["plan"]
     step_id: str = state["current_step_id"]
     step = next((s for s in plan.steps if s.id == step_id), None)
+    logger.info("Node: run_forensic_tool | step={} cmd={}", step_id[:8], step.tool_cmd if step else "?")
     if step is None:
         raise ValueError(f"Step {step_id!r} not found in plan")
     output_dir = Path(state.get("_output_dir", "."))
@@ -178,23 +266,32 @@ def run_forensic_tool(state: dict) -> dict:
         # Failed attempt
         is_last = attempt == max_attempts
         if not is_last:
-            # Ask Claude for a corrected command
-            correction = _request_correction(
-                step_id=step_id,
-                attempt_number=attempt,
-                original_cmd=list(rec.cmd),
-                exit_code=proc.returncode,
-                stderr=proc.stderr,
-            )
-            event = SelfCorrectionEvent(
-                step_id=step_id,
-                attempt_number=attempt,
-                original_cmd=list(rec.cmd),
-                corrected_cmd=correction.corrected_cmd,
-                correction_rationale=correction.rationale,
-            )
-            self_corrections.append(event)
-            step.tool_cmd = correction.corrected_cmd
+            # Ask LLM for a corrected command; if the LLM call fails
+            # (timeout, bad JSON, network error), skip correction and
+            # retry with the same command rather than crashing the graph.
+            try:
+                correction = _request_correction(
+                    step_id=step_id,
+                    attempt_number=attempt,
+                    original_cmd=list(rec.cmd),
+                    exit_code=proc.returncode,
+                    stderr=proc.stderr,
+                    analysis_dir=analysis_dir,
+                )
+                event = SelfCorrectionEvent(
+                    step_id=step_id,
+                    attempt_number=attempt,
+                    original_cmd=list(rec.cmd),
+                    corrected_cmd=correction.corrected_cmd,
+                    correction_rationale=correction.rationale,
+                )
+                self_corrections.append(event)
+                step.tool_cmd = correction.corrected_cmd
+            except Exception:
+                logger.warning(
+                    "Self-correction LLM failed for step={} attempt={}; retrying with original cmd",
+                    step_id[:8], attempt,
+                )
             if retry_delay > 0:
                 time.sleep(retry_delay)
         else:

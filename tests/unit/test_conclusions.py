@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -31,21 +32,17 @@ def _make_invocation(stdout_path: Path, inv_id: str = "inv-001") -> ToolInvocati
     return inv
 
 
-def _make_conclusions_output(statements: list[str]) -> MagicMock:
-    """Build a mock _ConclusionsOutput with the given statements."""
-    conclusions = []
-    for i, stmt in enumerate(statements):
-        spec = MagicMock()
-        spec.model_dump.return_value = {
+def _make_llm_response(statements: list[str]) -> MagicMock:
+    """Build a mock LLM response whose .content is valid JSON for _ConclusionsOutput."""
+    conclusions = [
+        {
             "statement": stmt,
             "supporting_invocation_ids": [f"inv-{i:03d}"],
             "confidence": "high",
         }
-        conclusions.append(spec)
-
-    output = MagicMock()
-    output.conclusions = conclusions
-    return output
+        for i, stmt in enumerate(statements)
+    ]
+    return MagicMock(content=json.dumps({"conclusions": conclusions}))
 
 
 # ---------------------------------------------------------------------------
@@ -88,11 +85,11 @@ def test_synthesize_conclusions_produces_conclusion_dicts(read_only_evidence, tm
         "anomalies": [],
     }
 
-    mock_output = _make_conclusions_output(["Malware artifacts found in Users directory"])
+    mock_response = _make_llm_response(["Malware artifacts found in Users directory"])
 
     with patch("valravn.nodes.conclusions._get_conclusions_llm") as mock_llm_fn:
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_output
+        mock_llm.invoke.return_value = mock_response
         mock_llm_fn.return_value = mock_llm
 
         result = synthesize_conclusions(state)
@@ -136,13 +133,12 @@ def test_synthesize_conclusions_includes_anomalies_in_prompt(read_only_evidence,
         "anomalies": [anomaly],
     }
 
-    mock_output = _make_conclusions_output([])
-
+    mock_response = _make_llm_response([])
     captured_messages = []
 
     def capture_invoke(messages):
         captured_messages.extend(messages)
-        return mock_output
+        return mock_response
 
     with patch("valravn.nodes.conclusions._get_conclusions_llm") as mock_llm_fn:
         mock_llm = MagicMock()
@@ -174,12 +170,12 @@ def test_synthesize_conclusions_truncates_long_stdout(read_only_evidence, tmp_pa
         "anomalies": [],
     }
 
-    mock_output = _make_conclusions_output([])
+    mock_response = _make_llm_response([])
     captured_messages = []
 
     def capture_invoke(messages):
         captured_messages.extend(messages)
-        return mock_output
+        return mock_response
 
     with patch("valravn.nodes.conclusions._get_conclusions_llm") as mock_llm_fn:
         mock_llm = MagicMock()
@@ -208,11 +204,11 @@ def test_synthesize_conclusions_handles_missing_stdout(read_only_evidence, tmp_p
         "anomalies": [],
     }
 
-    mock_output = _make_conclusions_output([])
+    mock_response = _make_llm_response([])
 
     with patch("valravn.nodes.conclusions._get_conclusions_llm") as mock_llm_fn:
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_output
+        mock_llm.invoke.return_value = mock_response
         mock_llm_fn.return_value = mock_llm
 
         result = synthesize_conclusions(state)

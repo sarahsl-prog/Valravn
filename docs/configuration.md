@@ -155,11 +155,11 @@ Valravn supports multiple LLM providers via a unified factory. Configure models 
 
 ```yaml
 models:
-  plan: anthropic:claude-3-5-sonnet-20241022
-  reflector: anthropic:claude-3-5-sonnet-20241022
-  mutator: anthropic:claude-3-5-sonnet-20241022
-  anomaly: anthropic:claude-3-5-sonnet-20241022
-  conclusions: anthropic:claude-3-5-sonnet-20241022
+  plan: anthropic:claude-sonnet-4-6
+  reflector: anthropic:claude-sonnet-4-6
+  mutator: anthropic:claude-sonnet-4-6
+  anomaly: anthropic:claude-sonnet-4-6
+  conclusions: anthropic:claude-sonnet-4-6
   tool_runner: openai:gpt-4o  # Example: use OpenAI for tool corrections
 ```
 
@@ -167,7 +167,7 @@ models:
 
 | Provider | Format Example | Notes |
 |----------|----------------|-------|
-| Anthropic | `anthropic:claude-3-5-sonnet-20241022` | Requires `ANTHROPIC_API_KEY` |
+| Anthropic | `anthropic:claude-sonnet-4-6` | Requires `ANTHROPIC_API_KEY` |
 | OpenAI | `openai:gpt-4o` | Requires `OPENAI_API_KEY` |
 | Ollama | `ollama:llama3.2` | Local inference, requires Ollama server |
 | OpenRouter | `openrouter:anthropic/claude-3-opus-20240229` | Requires `OPENROUTER_API_KEY` |

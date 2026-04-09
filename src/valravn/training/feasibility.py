@@ -22,12 +22,11 @@ Also includes FeasibilityMemory class for command safety validation:
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-_LOGGER = logging.getLogger(__name__)
+from loguru import logger
 
 # Registry for replay buffer feasibility rules
 _custom_feasibility_rules: list[Callable[[dict[str, Any]], bool]] = []
@@ -89,16 +88,33 @@ class FeasibilityMemory:
             return False, f"Command includes destructive operation"
         return True, ""
     
+    # Commands that can write to or destroy a path when it is their target.
+    _DESTRUCTIVE_CMDS: frozenset[str] = frozenset({
+        "rm", "rmdir", "del", "remove", "delete", "destroy",
+        "overwrite", "shred", "wipe", "truncate",
+        "mv", "move", "cp", "copy",  # could overwrite evidence
+        "dd", "tee",                 # classic evidence-clobbering tools
+    })
+
     def _check_evidence_protection(self, cmd: list[str], evidence_refs: str) -> tuple[bool, str]:
-        """Check evidence paths are protected from modification."""
-        if not evidence_refs:
+        """Check that destructive commands do not target evidence paths.
+
+        Read-only forensic tools (fls, icat, vol.py, log2timeline.py …) are
+        expected to receive the evidence path as an input argument and are
+        explicitly allowed through.  Only commands in _DESTRUCTIVE_CMDS are
+        checked.
+        """
+        if not cmd or not evidence_refs:
+            return True, ""
+        executable = Path(cmd[0]).name  # strip directory prefix if present
+        if executable not in self._DESTRUCTIVE_CMDS:
             return True, ""
         evidence_list = evidence_refs.split(",") if isinstance(evidence_refs, str) else []
         for arg in cmd:
             for ev_path in evidence_list:
                 ev_path = ev_path.strip()
                 if ev_path and arg.startswith(ev_path):
-                    return False, f"Command references evidence path {ev_path}"
+                    return False, f"Destructive command '{executable}' targets evidence path {ev_path}"
         return True, ""
     
     def _check_valid_command(self, cmd: list[str], evidence_refs: str) -> tuple[bool, str]:
@@ -129,7 +145,7 @@ class FeasibilityMemory:
                 if not result:
                     violations.append(f"[{rule.rule_id}] {rule.description}: {msg}")
             except Exception as e:
-                _LOGGER.warning("Feasibility rule %r raised exception: %s", rule.rule_id, e)
+                logger.warning("Feasibility rule {!r} raised exception: {}", rule.rule_id, e)
         
         return len(violations) == 0, violations
     
@@ -174,7 +190,7 @@ def register_feasibility_rule(
         The registered function (for use as decorator).
     """
     _custom_feasibility_rules.append(func)
-    _LOGGER.debug("Registered custom feasibility rule: %s", func.__name__)
+    logger.debug("Registered custom feasibility rule: {}", func.__name__)
     return func
 
 
@@ -188,13 +204,13 @@ def unregister_feasibility_rule(
     """
     if func in _custom_feasibility_rules:
         _custom_feasibility_rules.remove(func)
-        _LOGGER.debug("Unregistered custom feasibility rule: %s", func.__name__)
+        logger.debug("Unregistered custom feasibility rule: {}", func.__name__)
 
 
 def clear_feasibility_rules() -> None:
     """Clear all custom feasibility rules."""
     _custom_feasibility_rules.clear()
-    _LOGGER.debug("Cleared all custom feasibility rules")
+    logger.debug("Cleared all custom feasibility rules")
 
 
 def check_feasibility(case: dict[str, Any]) -> tuple[bool, str]:
@@ -218,10 +234,10 @@ def check_feasibility(case: dict[str, Any]) -> tuple[bool, str]:
             result = rule(case)
             if not result:
                 reason = f"Feasibility rule '{rule.__name__}' rejected case"
-                _LOGGER.debug(reason)
+                logger.debug(reason)
                 return False, reason
         except Exception as e:
-            _LOGGER.error("Feasibility rule '%s' raised exception: %s", rule.__name__, e)
+            logger.error("Feasibility rule '{}' raised exception: {}", rule.__name__, e)
             # Continue checking other rules
             continue
 

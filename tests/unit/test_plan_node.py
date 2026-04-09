@@ -1,3 +1,4 @@
+import json
 from unittest.mock import MagicMock, patch
 
 from valravn.models.task import InvestigationPlan, InvestigationTask, PlannedStep, StepStatus
@@ -24,23 +25,22 @@ def _base_state(read_only_evidence, output_dir):
 
 
 def test_plan_investigation_populates_steps(read_only_evidence, output_dir):
-    mock_response = MagicMock()
-    mock_response.steps = [
-        MagicMock(
-            skill_domain="memory-analysis",
-            tool_cmd=[
+    content = json.dumps({"steps": [
+        {
+            "skill_domain": "memory-analysis",
+            "tool_cmd": [
                 "python3", "/opt/volatility3-2.20.0/vol.py",
                 "-f", "/mnt/mem.lime", "windows.netstat",
             ],
-            rationale="list network connections",
-        )
-    ]
+            "rationale": "list network connections",
+        }
+    ]})
 
     state = _base_state(read_only_evidence, output_dir)
 
     with patch("valravn.nodes.plan._get_llm") as mock_llm_fn:
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_response
+        mock_llm.invoke.return_value = MagicMock(content=content)
         mock_llm_fn.return_value = mock_llm
 
         result = plan_investigation(state)
@@ -51,15 +51,14 @@ def test_plan_investigation_populates_steps(read_only_evidence, output_dir):
 
 
 def test_plan_investigation_writes_json(read_only_evidence, output_dir):
-    mock_response = MagicMock()
-    mock_response.steps = [
-        MagicMock(skill_domain="sleuthkit", tool_cmd=["fls", "-r"], rationale="list files")
-    ]
+    content = json.dumps({"steps": [
+        {"skill_domain": "sleuthkit", "tool_cmd": ["fls", "-r"], "rationale": "list files"}
+    ]})
     state = _base_state(read_only_evidence, output_dir)
 
     with patch("valravn.nodes.plan._get_llm") as mock_llm_fn:
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_response
+        mock_llm.invoke.return_value = MagicMock(content=content)
         mock_llm_fn.return_value = mock_llm
 
         plan_investigation(state)
@@ -116,13 +115,12 @@ def test_update_plan_marks_step_failed(read_only_evidence, output_dir):
 
 
 def test_plan_investigation_empty_steps(read_only_evidence, output_dir):
-    mock_response = MagicMock()
-    mock_response.steps = []
+    content = json.dumps({"steps": []})
     state = _base_state(read_only_evidence, output_dir)
 
     with patch("valravn.nodes.plan._get_llm") as mock_llm_fn:
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_response
+        mock_llm.invoke.return_value = MagicMock(content=content)
         mock_llm_fn.return_value = mock_llm
 
         result = plan_investigation(state)

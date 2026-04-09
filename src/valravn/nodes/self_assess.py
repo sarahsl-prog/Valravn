@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
+import re
+
 from langchain_core.messages import HumanMessage, SystemMessage
+from loguru import logger
 from pydantic import BaseModel
 
 from valravn.core.llm_factory import get_llm
@@ -12,12 +16,14 @@ You are an expert DFIR investigation analyst assessing the current progress of a
 investigation. Review the recent tool invocations and determine how well the investigation
 is progressing toward its objectives.
 
-Provide:
-  - assessment : a concise single-sentence evaluation of the current investigation progress
-  - polarity   : one of "positive", "neutral", or "negative"
-                 positive  — investigation is making clear forward progress
-                 neutral   — results are ambiguous or inconclusive
-                 negative  — investigation is stalled, failing, or going off-track
+Respond with valid JSON only — no markdown, no prose outside the JSON object.
+Output exactly this structure:
+{"assessment": "<single sentence>", "polarity": "<positive|neutral|negative>"}
+
+polarity values:
+  positive  — investigation is making clear forward progress
+  neutral   — results are ambiguous or inconclusive
+  negative  — investigation is stalled, failing, or going off-track
 """
 
 
@@ -26,15 +32,53 @@ class _AssessmentResult(BaseModel):
     polarity: str  # "positive", "neutral", "negative"
 
 
-def _get_assessor_llm():
-    """Get LLM for progress assessment with structured output."""
-    return get_llm(module="self_assess", output_schema=_AssessmentResult)
+def _parse_assessment(text: str) -> _AssessmentResult:
+    """Parse LLM output into _AssessmentResult.
+
+    Handles three formats models may emit:
+    1. Clean JSON: {"assessment": "...", "polarity": "..."}
+    2. Markdown-fenced JSON: ```json\\n{...}\\n```
+    3. Plain key: value lines (fallback for non-compliant models)
+    """
+    stripped = text.strip()
+
+    # Strip markdown code fences
+    fenced = re.sub(r"^```[a-zA-Z]*\n?", "", stripped)
+    fenced = re.sub(r"\n?```$", "", fenced).strip()
+
+    # Attempt JSON parse
+    for candidate in (fenced, stripped):
+        try:
+            data = json.loads(candidate)
+            polarity = str(data.get("polarity", "neutral")).lower()
+            if polarity not in ("positive", "neutral", "negative"):
+                polarity = "neutral"
+            return _AssessmentResult(
+                assessment=str(data.get("assessment", candidate)),
+                polarity=polarity,
+            )
+        except (json.JSONDecodeError, KeyError, TypeError):
+            pass
+
+    # Fallback: parse "key: value" lines
+    assessment_m = re.search(
+        r"(?i)\*{0,2}assessment\*{0,2}[:\s]+(.+?)(?:\n|$)", text, re.DOTALL
+    )
+    polarity_m = re.search(r"(?i)\*{0,2}polarity\*{0,2}[:\s]+(\w+)", text)
+
+    assessment = assessment_m.group(1).strip() if assessment_m else text.strip()
+    polarity = polarity_m.group(1).strip().lower() if polarity_m else "neutral"
+    if polarity not in ("positive", "neutral", "negative"):
+        polarity = "neutral"
+
+    return _AssessmentResult(assessment=assessment, polarity=polarity)
 
 
 def assess_progress(state: dict) -> dict:
     """LangGraph node: self-assess investigation progress before each tool execution."""
     plan = state.get("plan")
     current_step_id = state.get("current_step_id")
+    logger.info("Node: assess_progress | step={}", (current_step_id or "none")[:8])
 
     # If no current step, nothing to assess — return existing assessments unchanged
     if current_step_id is None:
@@ -70,7 +114,7 @@ def assess_progress(state: dict) -> dict:
     human_content = (
         f"## Current step\n{step_description} (id={current_step_id})\n\n"
         f"## Recent tool invocations (last 5)\n{history_text}\n\n"
-        "Assess the current investigation progress."
+        "Assess the current investigation progress. Respond with JSON only."
     )
 
     messages = [
@@ -78,7 +122,15 @@ def assess_progress(state: dict) -> dict:
         HumanMessage(content=human_content),
     ]
 
-    result: _AssessmentResult = _get_assessor_llm().invoke(messages)
+    # Self-assessment is non-critical (observability only). If the LLM call
+    # fails, log the error and continue rather than crashing the graph.
+    try:
+        llm = get_llm(module="self_assess")
+        response = llm.invoke(messages)
+        result = _parse_assessment(response.content)
+    except Exception:
+        logger.warning("Self-assessment LLM failed for step={}; skipping", current_step_id[:8])
+        return {"_self_assessments": list(state.get("_self_assessments") or [])}
 
     signal = SelfGuidanceSignal(
         assessment=result.assessment,

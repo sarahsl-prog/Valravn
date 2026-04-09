@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-import logging
 import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, field_validator
 
-from valravn.core.llm_factory import get_llm
+from loguru import logger
 
+from valravn.core.llm_factory import get_llm
 from valravn.training.optimizer_state import OptimizerState
 from valravn.training.playbook import SecurityPlaybook, ProtectedEntryError
-
-_LOGGER = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = """\
 You are a DFIR playbook editor. Given a diagnostic report and the current state of a
@@ -182,15 +180,15 @@ def apply_mutation(
     try:
         spec: MutationSpec = _get_mutator_llm().invoke(messages)
     except Exception as e:
-        _LOGGER.error("LLM invocation failed during mutation: %s", e)
+        logger.error("LLM invocation failed during mutation: {}", e)
         raise InvalidMutationError(f"LLM failed to produce valid mutation spec: {e}") from e
     
     # BUG-003: Apply safety checks before applying mutation
     _check_mutation_safety(playbook, spec)
 
     if spec.operation == "ADD":
-        _LOGGER.info(
-            "ADD operation: entry_id=%r to playbook at iteration %d, diagnostic: %r",
+        logger.info(
+            "ADD operation: entry_id={!r} to playbook at iteration {}, diagnostic: {!r}",
             spec.entry_id,
             iteration,
             diagnostic_text[:200],
@@ -204,8 +202,8 @@ def apply_mutation(
         optimizer_state.record_change(iteration, f"ADD {spec.entry_id}: {spec.rule}")
 
     elif spec.operation == "UPDATE":
-        _LOGGER.info(
-            "UPDATE operation: entry_id=%r at iteration %d, diagnostic: %r",
+        logger.info(
+            "UPDATE operation: entry_id={!r} at iteration {}, diagnostic: {!r}",
             spec.entry_id,
             iteration,
             diagnostic_text[:200],
@@ -218,8 +216,8 @@ def apply_mutation(
         optimizer_state.record_change(iteration, f"UPDATE {spec.entry_id}: {spec.rule}")
 
     elif spec.operation == "DELETE":
-        _LOGGER.info(
-            "DELETE operation: entry_id=%r at iteration %d, rationale: %r",
+        logger.info(
+            "DELETE operation: entry_id={!r} at iteration {}, rationale: {!r}",
             spec.entry_id,
             iteration,
             spec.rationale[:200] if spec.rationale else "(no rationale)",
@@ -232,7 +230,7 @@ def apply_mutation(
         optimizer_state.record_change(iteration, f"DELETE {spec.entry_id}: {spec.rationale}")
 
     elif spec.operation == "NOOP":
-        _LOGGER.debug("NOOP operation: no mutation applied at iteration %d", iteration)
+        logger.debug("NOOP operation: no mutation applied at iteration {}", iteration)
 
     # NOOP: no changes to playbook or ledger
 
