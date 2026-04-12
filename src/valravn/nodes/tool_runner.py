@@ -13,7 +13,6 @@ from pydantic import BaseModel
 
 from valravn.core.llm_factory import get_llm
 from valravn.core.parsing import parse_llm_json
-
 from valravn.models.records import ToolInvocationRecord
 from valravn.models.report import SelfCorrectionEvent, ToolFailureRecord
 

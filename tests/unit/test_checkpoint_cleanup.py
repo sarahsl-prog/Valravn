@@ -7,8 +7,6 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
-
 from valravn.checkpoint_cleanup import (
     CheckpointCleanupPolicy,
     cleanup_checkpoints,

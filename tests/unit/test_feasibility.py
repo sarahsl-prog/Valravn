@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from valravn.training.feasibility import (
     check_feasibility,
     clear_feasibility_rules,

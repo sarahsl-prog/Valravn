@@ -9,10 +9,8 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Literal
 
 from loguru import logger
-from langgraph.checkpoint.sqlite import SqliteSaver
 
 # Default retention policy - keep last 7 days
 DEFAULT_RETENTION_DAYS = 7

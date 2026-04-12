@@ -8,7 +8,6 @@ from loguru import logger
 from pydantic import BaseModel
 
 from valravn.core.llm_factory import get_llm
-
 from valravn.training.self_guide import POLARITY_REWARD_MAP, SelfGuidanceSignal
 
 _SYSTEM_PROMPT = """\
