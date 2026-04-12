@@ -59,7 +59,7 @@ def _build_graph(checkpointer: SqliteSaver) -> object:
     from valravn.nodes.tool_runner import run_forensic_tool
 
     def route_after_anomaly_check(state: AgentState) -> str:
-        if state.get("_pending_anomalies"):
+        if state.get("_pending_anomalies", False):
             return "record_anomaly"
         return "update_plan"
 
@@ -69,6 +69,8 @@ def _build_graph(checkpointer: SqliteSaver) -> object:
         return "load_skill"
 
     def route_next_step(state: AgentState) -> str:
+        if state.get("_investigation_halted", False):
+            return "synthesize_conclusions"
         if state["plan"].next_pending_step() is not None:
             return "load_skill"
         return "synthesize_conclusions"
@@ -143,6 +145,7 @@ def run(task: InvestigationTask, app_cfg: AppConfig, out_cfg: OutputConfig) -> i
         "_detected_anomaly_data": None,
         "_self_assessments": [],
         "_follow_up_steps": [],
+        "_investigation_halted": False,
     }
 
     config = {

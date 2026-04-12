@@ -122,7 +122,8 @@ def test_check_anomalies_detected(read_only_evidence, output_dir, tmp_path):
     }
 
     import json
-    mock_response = MagicMock(content=json.dumps({**anomaly_dump, "response_action": "no_follow_up_warranted"}))
+    response_json = json.dumps({**anomaly_dump, "response_action": "no_follow_up_warranted"})
+    mock_response = MagicMock(content=response_json)
 
     state = _base_state(read_only_evidence, output_dir, invocations=[invocation])
 
@@ -279,3 +280,44 @@ def test_record_anomaly_generates_follow_up_with_strings_cmd(read_only_evidence,
     assert "strings" in " ".join(follow_up.tool_cmd)
     assert "-n" in " ".join(follow_up.tool_cmd)
     assert "20" in " ".join(follow_up.tool_cmd)
+
+
+def test_record_anomaly_sets_investigation_halted_flag(read_only_evidence, output_dir):
+    """A-02: record_anomaly must set _investigation_halted=True for INVESTIGATION_HALT action."""
+    detected_data = {
+        "anomaly_detected": True,
+        "description": "Evidence volume unmounted mid-investigation",
+        "forensic_significance": "Cannot continue without evidence",
+        "category": "integrity_failure",
+        "response_action": "investigation_cannot_proceed",
+    }
+
+    state = _base_state(
+        read_only_evidence,
+        output_dir,
+        detected_anomaly_data=detected_data,
+    )
+
+    result = record_anomaly(state)
+
+    assert result.get("_investigation_halted") is True
+    assert result["_follow_up_steps"] == []
+
+
+def test_record_anomaly_does_not_set_halt_for_other_actions(read_only_evidence, output_dir):
+    """A-02: _investigation_halted must be False for non-halt response actions."""
+    for action in ("added_follow_up_steps", "no_follow_up_warranted"):
+        detected_data = {
+            "anomaly_detected": True,
+            "description": "Minor anomaly",
+            "forensic_significance": "low",
+            "category": "integrity_failure",
+            "response_action": action,
+        }
+        state = _base_state(
+            read_only_evidence,
+            output_dir,
+            detected_anomaly_data=detected_data,
+        )
+        result = record_anomaly(state)
+        assert result.get("_investigation_halted") is False, f"Expected False for action={action}"

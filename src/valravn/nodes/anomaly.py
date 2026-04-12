@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-
 from pathlib import Path
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -9,7 +8,6 @@ from pydantic import BaseModel
 
 from valravn.core.llm_factory import get_llm
 from valravn.core.parsing import parse_llm_json
-
 from valravn.models.records import Anomaly, AnomalyResponseAction
 from valravn.models.task import PlannedStep, StepStatus
 
@@ -197,8 +195,11 @@ def record_anomaly(state: dict) -> dict:
         else:
             follow_up_steps = []
 
+    investigation_halted = anomaly.response_action == AnomalyResponseAction.INVESTIGATION_HALT
+
     return {
         "anomalies": updated_anomalies,
         "_follow_up_steps": follow_up_steps,
         "_pending_anomalies": False,
+        "_investigation_halted": investigation_halted,
     }

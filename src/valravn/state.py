@@ -37,3 +37,4 @@ class AgentState(TypedDict):
     _self_assessments: list[dict]
     _conclusions: list[Any]
     _follow_up_steps: list[PlannedStep]
+    _investigation_halted: bool
