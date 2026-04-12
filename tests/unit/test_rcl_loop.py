@@ -134,3 +134,39 @@ def test_rcl_loop_records_consecutive_failures_correctly(tmp_path: Path) -> None
         )
     # After reaching n_reject=4, case is removed (rejected from buffer)
     assert "case-flaky" not in trainer.replay_buffer.buffer
+
+
+def test_rcl_loop_non_actionable_gap_skips_mutation(tmp_path: Path) -> None:
+    """When attribution != 'actionable_gap', mutator is NOT called and version unchanged."""
+    from unittest.mock import patch
+
+    from valravn.training.replay_buffer import ReplayBuffer
+
+    for attribution in ("execution_variance", "intractable"):
+        mock_diagnostic = ReflectionDiagnostic(
+            attribution=attribution,
+            root_cause="Tool not installed on SIFT",
+            coverage_gap="N/A",
+        )
+
+        trainer = RCLTrainer(state_dir=tmp_path / attribution)
+        trainer.replay_buffer = ReplayBuffer(n_pass=3, n_reject=10)
+        initial_version = trainer.playbook.version
+
+        with (
+            patch(
+                "valravn.training.rcl_loop.reflect_on_trajectory",
+                return_value=mock_diagnostic,
+            ),
+            patch("valravn.training.rcl_loop.apply_mutation") as mock_mutate,
+        ):
+            result = trainer.process_investigation_result(
+                case_id="case-env",
+                success_trace="ran tool",
+                failure_trace="tool missing",
+                success=False,
+            )
+
+        mock_mutate.assert_not_called()
+        assert trainer.playbook.version == initial_version
+        assert result is mock_diagnostic
