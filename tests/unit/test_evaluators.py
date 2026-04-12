@@ -356,3 +356,72 @@ def test_evaluate_report_unknown_suite_raises(tmp_path):
 
     with pytest.raises(ValueError, match="Unknown suite"):
         evaluate_report(report_path, suite="nonexistent-suite")
+
+
+# ---------------------------------------------------------------------------
+# A-07: SC-005 hash comparison
+# ---------------------------------------------------------------------------
+
+
+def test_evidence_integrity_detects_modified_readonly_file_via_hash(tmp_path):
+    """A-07: SC-005 must fail when evidence_hashes differ even if file is read-only.
+
+    This is the case that permission-checking alone cannot detect: a read-only
+    file that was modified in-place (e.g. by temporarily changing permissions,
+    writing new content, then restoring read-only). Hash comparison is required.
+    """
+    import hashlib
+
+    evidence = tmp_path / "evidence.raw"
+    evidence.write_bytes(b"original content")
+    original_hash = hashlib.sha256(b"original content").hexdigest()
+
+    # Simulate a tamper-then-restore: file is now read-only but content changed
+    os.chmod(evidence, 0o644)
+    evidence.write_bytes(b"tampered content")
+    os.chmod(evidence, 0o444)  # restore read-only — permission check would pass!
+
+    # Report stores the PRE-tamper hash
+    report = _minimal_report(
+        evidence_refs=[str(evidence)],
+        evidence_hashes={str(evidence): original_hash},
+    )
+    report_path = _save_report(report, tmp_path)
+
+    with patch(_MLFLOW_MODULE) as mock_mlflow:
+        mock_mlflow.start_run.return_value.__enter__ = MagicMock(return_value=None)
+        mock_mlflow.start_run.return_value.__exit__ = MagicMock(return_value=False)
+
+        from valravn.evaluation.evaluators import evaluate_report
+
+        results = evaluate_report(report_path, suite="evidence-integrity")
+
+    assert results["sc_005_evidence_integrity"] is False, (
+        "SC-005 must fail when hash mismatch detected (file tampered then locked)"
+    )
+
+
+def test_evidence_integrity_passes_when_hash_matches(tmp_path):
+    """A-07: SC-005 must pass when stored hash matches current file hash."""
+    import hashlib
+
+    evidence = tmp_path / "evidence.raw"
+    evidence.write_bytes(b"untouched content")
+    os.chmod(evidence, 0o444)
+    current_hash = hashlib.sha256(b"untouched content").hexdigest()
+
+    report = _minimal_report(
+        evidence_refs=[str(evidence)],
+        evidence_hashes={str(evidence): current_hash},
+    )
+    report_path = _save_report(report, tmp_path)
+
+    with patch(_MLFLOW_MODULE) as mock_mlflow:
+        mock_mlflow.start_run.return_value.__enter__ = MagicMock(return_value=None)
+        mock_mlflow.start_run.return_value.__exit__ = MagicMock(return_value=False)
+
+        from valravn.evaluation.evaluators import evaluate_report
+
+        results = evaluate_report(report_path, suite="evidence-integrity")
+
+    assert results["sc_005_evidence_integrity"] is True

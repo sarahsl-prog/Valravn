@@ -71,6 +71,7 @@ def write_findings_report(state: dict) -> dict:
         tool_failures=tool_failures,
         self_corrections=self_corrections,
         investigation_plan_path=plan_path,
+        evidence_hashes=dict(state.get("_evidence_hashes") or {}),
     )
 
     ts = report.generated_at_utc.strftime("%Y%m%d_%H%M%S")

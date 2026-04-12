@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class Conclusion(BaseModel):
@@ -45,6 +45,7 @@ class FindingsReport(BaseModel):
     tool_failures: list[ToolFailureRecord]
     self_corrections: list[SelfCorrectionEvent]
     investigation_plan_path: Path
+    evidence_hashes: dict[str, str] = Field(default_factory=dict)
 
     def model_post_init(self, __context: object) -> None:
         if self.generated_at_utc is None:

@@ -38,3 +38,4 @@ class AgentState(TypedDict):
     _conclusions: list[Any]
     _follow_up_steps: list[PlannedStep]
     _investigation_halted: bool
+    _evidence_hashes: dict[str, str]

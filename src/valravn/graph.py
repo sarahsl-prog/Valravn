@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -105,6 +106,18 @@ def _build_graph(checkpointer: SqliteSaver) -> object:
 # Public entry point
 # ---------------------------------------------------------------------------
 
+def _hash_evidence_files(evidence_refs: list[str]) -> dict[str, str]:
+    """Compute SHA-256 hashes for all evidence files that currently exist."""
+    hashes: dict[str, str] = {}
+    for ref in evidence_refs:
+        p = Path(ref)
+        if p.is_file():
+            sha = hashlib.sha256()
+            sha.update(p.read_bytes())
+            hashes[ref] = sha.hexdigest()
+    return hashes
+
+
 def run(task: InvestigationTask, app_cfg: AppConfig, out_cfg: OutputConfig) -> int:
     """Compile and invoke the investigation graph. Returns exit code (0 or 1)."""
     db_path = out_cfg.checkpoints_db
@@ -146,6 +159,7 @@ def run(task: InvestigationTask, app_cfg: AppConfig, out_cfg: OutputConfig) -> i
         "_self_assessments": [],
         "_follow_up_steps": [],
         "_investigation_halted": False,
+        "_evidence_hashes": _hash_evidence_files(task.evidence_refs),
     }
 
     config = {

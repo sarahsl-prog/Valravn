@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import stat
@@ -49,8 +50,21 @@ def _eval_citation_coverage(report: FindingsReport) -> bool:
     return True
 
 
+def _compute_sha256(path: Path) -> str:
+    """Return the hex SHA-256 digest of a file."""
+    sha = hashlib.sha256()
+    sha.update(path.read_bytes())
+    return sha.hexdigest()
+
+
 def _eval_evidence_integrity(report: FindingsReport) -> bool:
-    """SC-005: no evidence file was modified — each path must exist and be read-only."""
+    """SC-005: no evidence file was modified during the investigation.
+
+    When the report contains pre-investigation SHA-256 hashes (evidence_hashes),
+    compare current file hash against the stored value. This detects files that
+    were modified then locked back to read-only. Falls back to the permission-bit
+    check for legacy reports that predate hash recording.
+    """
     for ref in report.evidence_refs:
         p = Path(ref)
         if not p.exists():
@@ -59,8 +73,14 @@ def _eval_evidence_integrity(report: FindingsReport) -> bool:
                 file=sys.stderr,
             )
             return False
+        if report.evidence_hashes:
+            stored_hash = report.evidence_hashes.get(ref)
+            if stored_hash is not None:
+                if _compute_sha256(p) != stored_hash:
+                    return False
+                continue
+        # Legacy fallback: permission-bit check
         mode = p.stat().st_mode
-        # Writable by owner, group, or other → integrity violation
         if mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH):
             return False
     return True
