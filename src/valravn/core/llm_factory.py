@@ -21,18 +21,6 @@ import os
 
 from loguru import logger
 
-# Default model chains per module — tried in order on failure.
-# A single string is also valid (no fallback).
-DEFAULT_MODELS: dict[str, list[str]] = {
-    "anomaly": ["ollama:minimax-m2.5:cloud"],
-    "conclusions": ["ollama:minimax-m2.5:cloud"],
-    "plan": ["ollama:minimax-m2.5:cloud"],
-    "self_assess": ["ollama:minimax-m2.5:cloud"],
-    "tool_runner": ["ollama:minimax-m2.5:cloud"],
-    "reflector": ["ollama:minimax-m2.5:cloud"],
-    "mutator": ["ollama:minimax-m2.5:cloud"],
-}
-
 
 def _resolve_model_chain(
     provider_model: str | None = None,
@@ -43,7 +31,10 @@ def _resolve_model_chain(
     Priority:
     1. Explicit provider_model argument (single model, no fallback)
     2. VALRAVN_{MODULE}_MODEL env var (comma-separated for chains)
-    3. DEFAULT_MODELS[module] list
+
+    There is no built-in default — the model must be configured explicitly.
+    This ensures misconfigured deployments fail fast with an actionable error
+    instead of silently using a hardcoded model that may not be available.
     """
     if provider_model is not None:
         return [provider_model]
@@ -55,14 +46,12 @@ def _resolve_model_chain(
             # Comma-separated list from env var or config injection
             return [m.strip() for m in env_val.split(",") if m.strip()]
 
-        default = DEFAULT_MODELS.get(module)
-        if default:
-            return list(default)
-
+    mod_upper = module.upper() if module else "?"
     raise ValueError(
         f"No model configured for module {module!r}. "
-        f"Set VALRAVN_{module.upper() if module else '?'}_MODEL env var, "
-        f"add it to config.yaml, or pass provider_model directly."
+        f"Set VALRAVN_{mod_upper}_MODEL env var "
+        f"or add it to config.yaml under 'models:'. "
+        f"Example: VALRAVN_{mod_upper}_MODEL=anthropic:claude-sonnet-4-6"
     )
 
 
@@ -73,9 +62,9 @@ def get_llm(
 ) -> object:
     """Get an LLM client, optionally with automatic fallback.
 
-    When multiple models are configured for a module (via config.yaml,
-    env var, or DEFAULT_MODELS), returns a LangChain RunnableWithFallbacks
-    that tries each model in order on failure.
+    When multiple models are configured for a module (via config.yaml or
+    env var), returns a LangChain RunnableWithFallbacks that tries each
+    model in order on failure.
 
     Args:
         provider_model: Explicit "provider:model" string (no fallback).
