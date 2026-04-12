@@ -32,6 +32,21 @@ def test_planned_step_default_status():
     assert step.status == StepStatus.PENDING
 
 
+def test_planned_step_original_tool_cmd_immutable():
+    """A-08: original_tool_cmd is set from tool_cmd at creation and survives overwrites."""
+    original = ["fls", "-r", "/mnt/img"]
+    step = PlannedStep(skill_domain="sleuthkit", tool_cmd=original, rationale="r")
+
+    assert step.original_tool_cmd == original
+
+    # Overwrite tool_cmd (as a correction would do)
+    step.tool_cmd = ["fls", "-r", "/mnt/img", "--fixed-flag"]
+
+    # original_tool_cmd must remain unchanged
+    assert step.original_tool_cmd == original
+    assert step.tool_cmd == ["fls", "-r", "/mnt/img", "--fixed-flag"]
+
+
 def test_investigation_plan_timestamps():
     plan = InvestigationPlan(task_id="abc")
     assert plan.created_at_utc.tzinfo == timezone.utc

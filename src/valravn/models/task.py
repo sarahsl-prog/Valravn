@@ -22,6 +22,7 @@ class PlannedStep(BaseModel):
     id: str = ""
     skill_domain: str
     tool_cmd: list[str]
+    original_tool_cmd: list[str] = []
     rationale: str
     status: StepStatus = StepStatus.PENDING
     depends_on: list[str] = []
@@ -30,6 +31,8 @@ class PlannedStep(BaseModel):
     def model_post_init(self, __context: object) -> None:
         if not self.id:
             self.id = str(uuid.uuid4())
+        if not self.original_tool_cmd:
+            self.original_tool_cmd = list(self.tool_cmd)
 
 
 class InvestigationPlan(BaseModel):
