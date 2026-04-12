@@ -49,3 +49,23 @@ def test_load_skill_unknown_domain(read_only_evidence):
     state = _make_state("unknown-domain", None, read_only_evidence)
     with pytest.raises(SkillNotFoundError):
         load_skill(state)
+
+
+def test_load_skill_step_id_not_in_plan(read_only_evidence):
+    """A-04: load_skill must raise a clear error when current_step_id is not in plan steps."""
+    task = InvestigationTask(prompt="test", evidence_refs=[str(read_only_evidence)])
+    step = PlannedStep(skill_domain="sleuthkit", tool_cmd=["fls"], rationale="r")
+    plan = InvestigationPlan(task_id=task.id, steps=[step])
+    state = {
+        "task": task,
+        "plan": plan,
+        "invocations": [],
+        "anomalies": [],
+        "report": None,
+        "current_step_id": "non-existent-step-id",
+        "skill_cache": {},
+        "messages": [],
+    }
+
+    with pytest.raises(KeyError, match="non-existent-step-id"):
+        load_skill(state)
