@@ -8,19 +8,22 @@ Valravn is a LangGraph `StateGraph` that drives autonomous DFIR investigations o
 START
   │
   ▼
-plan_investigation ──────────────────────────────────────► write_findings_report ► END
-  │ (steps exist)                                              ▲
-  ▼                                                            │ (no more steps)
-load_skill                                                     │
-  │                                                      update_plan ◄──────────────────┐
-  ▼                                                            │ (next step)             │
-run_forensic_tool                                              ▼                         │
-  │                                                       load_skill                     │
-  ▼                                                                                      │
-check_anomalies                                                                          │
-  │ (anomaly)                        │ (clean)                                           │
-  ▼                                  ▼                                                   │
-record_anomaly ──────────────► update_plan ────────────────────────────────────────────-┘
+plan_investigation ──────────────────────────────────────────────► synthesize_conclusions
+  │ (steps exist)                                                          │
+  ▼                                                                        ▼
+load_skill                                                         write_findings_report ► END
+  │                                                                        ▲
+  ▼                                                              (no more steps / halt)   │
+assess_progress                                                            │               │
+  │                                                                 update_plan ◄──────────┘
+  ▼                                                                        │ (next step)
+run_forensic_tool                                                          ▼
+  │                                                                    load_skill
+  ▼
+check_anomalies
+  │ (anomaly)                        │ (clean)
+  ▼                                  ▼
+record_anomaly ──────────────► update_plan
 ```
 
 ---
@@ -31,21 +34,24 @@ record_anomaly ──────────────► update_plan ──�
 stateDiagram-v2
     [*] --> plan_investigation
     plan_investigation --> load_skill : steps exist
-    plan_investigation --> write_findings_report : no steps
-    
-    load_skill --> run_forensic_tool
-    
+    plan_investigation --> synthesize_conclusions : no steps
+
+    load_skill --> assess_progress
+    assess_progress --> run_forensic_tool
+
     run_forensic_tool --> check_anomalies
-    
+
     check_anomalies --> record_anomaly : anomaly detected
     check_anomalies --> update_plan : clean
-    
+
     record_anomaly --> update_plan
-    
+
     update_plan --> load_skill : next step pending
-    update_plan --> write_findings_report : no more steps
+    update_plan --> synthesize_conclusions : no more steps / investigation halted
     update_plan --> update_plan : follow-up steps added
-    
+
+    synthesize_conclusions --> write_findings_report
+
     write_findings_report --> [*]
 ```
 
@@ -83,11 +89,19 @@ Raises `SkillNotFoundError` if the domain is unregistered or the file is missing
 
 ---
 
+### `assess_progress`
+
+**File**: `src/valravn/nodes/self_assess.py`
+
+Runs between `load_skill` and `run_forensic_tool`. Asks the LLM to self-assess whether the current step is still the right approach given everything learned so far (prior invocations, anomalies, corrections). Records the assessment in `_self_assessments` for inclusion in the final report. Non-blocking — even if the LLM call fails the graph continues to `run_forensic_tool`.
+
+---
+
 ### `run_forensic_tool`
 
 **File**: `src/valravn/nodes/tool_runner.py`
 
-Executes `step.tool_cmd` via `subprocess.run` with a 1-hour timeout. On failure it asks Claude for a corrected command (`_CorrectionSpec`) and retries, up to `max_attempts` times (default: 3).
+Executes `step.tool_cmd` via `subprocess.Popen` with real-time stderr streaming and a configurable timeout (default: 1 hour). On failure it asks Claude for a corrected command (`_CorrectionSpec`) and retries, up to `max_attempts` times (default: 3).
 
 Per attempt it writes:
 - `analysis/<uuid>.stdout` — raw stdout
@@ -137,6 +151,14 @@ Persists the detected anomaly to `analysis/anomalies.json` and queues a follow-u
 Marks the current step as `COMPLETED`, `FAILED`, or `EXHAUSTED`; appends any follow-up steps; advances `current_step_id` to the next pending step. Persists the updated plan to disk.
 
 **Routing**: If a next pending step exists → `load_skill`. Otherwise → `write_findings_report`.
+
+---
+
+### `synthesize_conclusions`
+
+**File**: `src/valravn/nodes/conclusions.py`
+
+Runs after all steps are complete (or when `_investigation_halted` is set). Calls the LLM to derive high-level `Conclusion` objects from the accumulated tool invocations and anomalies. Each conclusion must cite at least one `ToolInvocationRecord` (enforced by the Pydantic model). Results are stored in `_conclusions`.
 
 ---
 
@@ -214,7 +236,7 @@ InvestigationPlan
   └─ task_id, steps: list[PlannedStep], created_at_utc, last_updated_utc
 
 PlannedStep
-  └─ id, skill_domain, tool_cmd, rationale, status, invocation_ids
+  └─ id, skill_domain, tool_cmd, original_tool_cmd, rationale, status, invocation_ids
 
 ToolInvocationRecord
   └─ id, step_id, attempt_number, cmd, exit_code, stdout_path, stderr_path,
@@ -227,7 +249,7 @@ Anomaly
 FindingsReport
   └─ task_id, prompt, evidence_refs, generated_at_utc,
      conclusions, anomalies, tool_failures, self_corrections,
-     investigation_plan_path
+     investigation_plan_path, evidence_hashes
 ```
 
 ---
