@@ -2,9 +2,16 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from langchain_core.messages import AIMessage
+
 from valravn.training.mutator import MutationSpec, apply_mutation
 from valravn.training.optimizer_state import OptimizerState
 from valravn.training.playbook import SecurityPlaybook
+
+
+def _ai(spec: MutationSpec) -> AIMessage:
+    """Wrap a MutationSpec as an AIMessage for mocking."""
+    return AIMessage(content=spec.model_dump_json())
 
 
 def test_mutator_add_operation():
@@ -21,7 +28,7 @@ def test_mutator_add_operation():
 
     with patch("valravn.training.mutator._get_mutator_llm") as mock_llm_fn:
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_result
+        mock_llm.invoke.return_value = _ai(mock_result)
         mock_llm_fn.return_value = mock_llm
 
         apply_mutation(
@@ -53,7 +60,7 @@ def test_mutator_noop_for_intractable():
 
     with patch("valravn.training.mutator._get_mutator_llm") as mock_llm_fn:
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_result
+        mock_llm.invoke.return_value = _ai(mock_result)
         mock_llm_fn.return_value = mock_llm
 
         apply_mutation(
@@ -82,7 +89,7 @@ def test_mutator_delete_operation():
 
     with patch("valravn.training.mutator._get_mutator_llm") as mock_llm_fn:
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_result
+        mock_llm.invoke.return_value = _ai(mock_result)
         mock_llm_fn.return_value = mock_llm
 
         apply_mutation(
@@ -115,7 +122,7 @@ def test_mutator_update_operation():
 
     with patch("valravn.training.mutator._get_mutator_llm") as mock_llm_fn:
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_result
+        mock_llm.invoke.return_value = _ai(mock_result)
         mock_llm_fn.return_value = mock_llm
 
         apply_mutation(
@@ -190,7 +197,8 @@ def test_mutation_spec_entry_id_validation():
                 entry_id=entry_id,
                 rule="Test rule",
             )
-        assert "entry_id" in str(exc_info.value) or "entry_id must be kebab-case" in str(exc_info.value)
+        err = str(exc_info.value)
+        assert "entry_id" in err or "entry_id must be kebab-case" in err
 
 
 def test_mutation_spec_rule_safety():
@@ -198,8 +206,8 @@ def test_mutation_spec_rule_safety():
     import pytest
     from pydantic import ValidationError
 
-    # Valid rule (no injection)
-    spec = MutationSpec(
+    # Valid rule (no injection) — should not raise
+    MutationSpec(
         operation="ADD",
         entry_id="rule-test",
         rule="Verify SHA256 hash of evidence files",
@@ -258,6 +266,7 @@ def test_mutation_spec_length_limits():
 def test_mutation_safety_playbook_size_limit():
     """BUG-003: Cannot ADD entry when playbook at max capacity."""
     import pytest
+
     from valravn.training.mutator import InvalidMutationError
 
     playbook = SecurityPlaybook()
@@ -277,7 +286,7 @@ def test_mutation_safety_playbook_size_limit():
 
     with patch("valravn.training.mutator._get_mutator_llm") as mock_llm_fn:
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_result
+        mock_llm.invoke.return_value = _ai(mock_result)
         mock_llm_fn.return_value = mock_llm
 
         with pytest.raises(InvalidMutationError) as exc_info:
@@ -287,13 +296,14 @@ def test_mutation_safety_playbook_size_limit():
                 iteration=1,
                 diagnostic_text="actionable_gap: needs one more rule",
             )
-        
+
         assert "max capacity" in str(exc_info.value) or "1000" in str(exc_info.value)
 
 
 def test_mutation_safety_delete_nonexistent():
     """BUG-003: DELETE on non-existent entry raises InvalidMutationError."""
     import pytest
+
     from valravn.training.mutator import InvalidMutationError
 
     playbook = SecurityPlaybook()
@@ -308,7 +318,7 @@ def test_mutation_safety_delete_nonexistent():
 
     with patch("valravn.training.mutator._get_mutator_llm") as mock_llm_fn:
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_result
+        mock_llm.invoke.return_value = _ai(mock_result)
         mock_llm_fn.return_value = mock_llm
 
         with pytest.raises(InvalidMutationError) as exc_info:
@@ -326,6 +336,7 @@ def test_mutation_safety_delete_nonexistent():
 def test_mutation_safety_update_nonexistent():
     """BUG-003: UPDATE on non-existent entry raises InvalidMutationError."""
     import pytest
+
     from valravn.training.mutator import InvalidMutationError
 
     playbook = SecurityPlaybook()
@@ -341,7 +352,7 @@ def test_mutation_safety_update_nonexistent():
 
     with patch("valravn.training.mutator._get_mutator_llm") as mock_llm_fn:
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_result
+        mock_llm.invoke.return_value = _ai(mock_result)
         mock_llm_fn.return_value = mock_llm
 
         with pytest.raises(InvalidMutationError) as exc_info:
@@ -351,6 +362,27 @@ def test_mutation_safety_update_nonexistent():
                 iteration=1,
                 diagnostic_text="actionable_gap: rule needs update",
             )
-        
+
         assert "UPDATE" in str(exc_info.value)
         assert "non-existent" in str(exc_info.value)
+
+
+def test_apply_mutation_parses_llm_json():
+    """A-01: apply_mutation must parse the LLM AIMessage response, not assign it directly."""
+    from langchain_core.messages import AIMessage
+
+    playbook = SecurityPlaybook()
+    optimizer_state = OptimizerState()
+
+    llm_json = '{"operation": "NOOP", "entry_id": "", "rule": "", "rationale": ""}'
+
+    with patch("valravn.training.mutator._get_mutator_llm") as mock_factory:
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = AIMessage(content=llm_json)
+        mock_factory.return_value = mock_llm
+
+        # Should not raise AttributeError: 'AIMessage' object has no attribute 'operation'
+        apply_mutation(playbook, optimizer_state, iteration=1, diagnostic_text="test diag")
+
+    # NOOP means no entries added
+    assert len(playbook.entries) == 0

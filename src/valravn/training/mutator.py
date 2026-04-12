@@ -3,13 +3,13 @@ from __future__ import annotations
 import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from loguru import logger
 from pydantic import BaseModel, field_validator
 
-from loguru import logger
-
 from valravn.core.llm_factory import get_llm
+from valravn.core.parsing import parse_llm_json
 from valravn.training.optimizer_state import OptimizerState
-from valravn.training.playbook import SecurityPlaybook, ProtectedEntryError
+from valravn.training.playbook import ProtectedEntryError, SecurityPlaybook
 
 _SYSTEM_PROMPT = """\
 You are a DFIR playbook editor. Given a diagnostic report and the current state of a
@@ -178,7 +178,8 @@ def apply_mutation(
     ]
     
     try:
-        spec: MutationSpec = _get_mutator_llm().invoke(messages)
+        response = _get_mutator_llm().invoke(messages)
+        spec = parse_llm_json(response.content, MutationSpec)
     except Exception as e:
         logger.error("LLM invocation failed during mutation: {}", e)
         raise InvalidMutationError(f"LLM failed to produce valid mutation spec: {e}") from e
