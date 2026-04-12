@@ -96,6 +96,22 @@ def test_run_tool_invalid_step_id_raises(read_only_evidence, output_dir):
         run_forensic_tool(state)
 
 
+def test_run_tool_none_step_id_raises(read_only_evidence, output_dir):
+    """current_step_id=None must raise rather than producing a silent no-op."""
+    task = InvestigationTask(prompt="test", evidence_refs=[str(read_only_evidence)])
+    step = PlannedStep(skill_domain="sleuthkit", tool_cmd=["echo", "x"], rationale="r")
+    plan = InvestigationPlan(task_id=task.id, steps=[step])
+    state = {
+        "task": task, "plan": plan, "invocations": [],
+        "anomalies": [], "report": None,
+        "current_step_id": None, "skill_cache": {},
+        "messages": [], "_output_dir": str(output_dir),
+        "_retry_config": {"max_attempts": 1, "retry_delay_seconds": 0.0},
+    }
+    with pytest.raises((ValueError, TypeError, KeyError)):
+        run_forensic_tool(state)
+
+
 # ---------------------------------------------------------------------------
 # US3 — Retry loop and self-correction tests
 # ---------------------------------------------------------------------------
