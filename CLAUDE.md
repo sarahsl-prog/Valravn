@@ -49,4 +49,16 @@ nodes are plain functions accepting `AgentState` and returning partial state dic
 - 001-autonomous-dfir-agents: Evaluation replaced LangSmith → MLflow (local); air-gap safe
 
 <!-- MANUAL ADDITIONS START -->
+
+## 하네스: Valravn DFIR Agent Development
+
+**목표:** LangGraph 노드 구현, 테스트 작성, LLM 프롬프트 개선, 평가 실행을 전문 에이전트 팀으로 조율한다.
+
+**트리거:** Valravn 기능 추가, 노드 구현, 버그 수정, 테스트 작성, 프롬프트 개선, 평가 실행 요청 시 `valravn-dev` 스킬을 사용하라. 단순 질문은 직접 응답 가능.
+
+**변경 이력:**
+| 날짜 | 변경 내용 | 대상 | 사유 |
+|------|----------|------|------|
+| 2026-04-11 | 초기 구성 | 전체 | 신규 구축 |
+
 <!-- MANUAL ADDITIONS END -->
