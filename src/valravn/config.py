@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
 import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 # Load .env from repo root (if present) before any os.environ reads.
 # Values already set in the shell environment take precedence (override=False).
@@ -72,7 +75,14 @@ def load_config(path: Path | None) -> AppConfig:
     # Env vars already set (from .env or shell) take precedence.
     for module, provider_model in cfg.models.items():
         env_key = f"VALRAVN_{module.upper()}_MODEL"
-        if env_key not in os.environ:
+        if env_key in os.environ:
+            logger.warning(
+                "%s already set in environment (%r); ignoring YAML value %r",
+                env_key,
+                os.environ[env_key],
+                provider_model,
+            )
+        else:
             if isinstance(provider_model, list):
                 os.environ[env_key] = ",".join(provider_model)
             else:

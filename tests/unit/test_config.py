@@ -38,3 +38,22 @@ def test_output_config_dirs(tmp_path):
     assert cfg.reports_dir == tmp_path / "reports"
     assert cfg.checkpoints_db == tmp_path / "analysis" / "checkpoints.db"
     assert cfg.traces_dir == tmp_path / "analysis" / "traces"
+
+
+def test_load_config_logs_when_env_takes_precedence(tmp_path, monkeypatch, caplog):
+    """A-10: When an env var is already set, load_config must log a warning."""
+    import logging
+
+    monkeypatch.setenv("VALRAVN_PLAN_MODEL", "anthropic:claude-opus-4-6")
+
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text("models:\n  plan: ollama:llama3\n")
+
+    with caplog.at_level(logging.WARNING):
+        load_config(cfg_file)
+
+    # The log must mention the env var and the YAML value that was skipped
+    logged = [r.message for r in caplog.records]
+    assert any(
+        "VALRAVN_PLAN_MODEL" in msg for msg in logged
+    ), f"Expected warning about VALRAVN_PLAN_MODEL being skipped. Got: {logged}"
