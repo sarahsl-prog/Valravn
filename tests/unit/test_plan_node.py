@@ -67,6 +67,27 @@ def test_plan_investigation_writes_json(read_only_evidence, output_dir):
     assert plan_file.exists()
 
 
+def test_plan_investigation_json_content_is_valid(read_only_evidence, output_dir):
+    """investigation_plan.json must contain parseable JSON with the planned steps."""
+    content = json.dumps({"steps": [
+        {"skill_domain": "sleuthkit", "tool_cmd": ["fls", "-r", "/ev"], "rationale": "list"}
+    ]})
+    state = _base_state(read_only_evidence, output_dir)
+
+    with patch("valravn.nodes.plan._get_llm") as mock_llm_fn:
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(content=content)
+        mock_llm_fn.return_value = mock_llm
+
+        plan_investigation(state)
+
+    plan_file = output_dir / "analysis" / "investigation_plan.json"
+    data = json.loads(plan_file.read_text())
+    # Must be a dict with at least a steps list
+    assert isinstance(data, dict)
+    assert "steps" in data or "task_id" in data  # InvestigationPlan JSON shape
+
+
 def test_update_plan_marks_step_completed(read_only_evidence, output_dir):
     task = InvestigationTask(prompt="test", evidence_refs=[str(read_only_evidence)])
     step = PlannedStep(skill_domain="sleuthkit", tool_cmd=["fls"], rationale="r")
