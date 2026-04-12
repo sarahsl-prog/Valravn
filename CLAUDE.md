@@ -4,7 +4,7 @@ Auto-generated from all feature plans. Last updated: 2026-04-05
 
 ## Active Technologies
 
-- Python 3.12 (`.venv` already initialised in repo root) + `langgraph` + `langchain-anthropic` + `mlflow`; SIFT native tools via subprocess (001-autonomous-dfir-agents)
+- Python 3.12+ (`.venv` already initialised in repo root — actual runtime is Python 3.13) + `langgraph` + `langchain-anthropic` + `mlflow`; SIFT native tools via subprocess (001-autonomous-dfir-agents)
 
 **Air-gap constraint**: No cloud services at runtime. All tracing, evaluation, and artifact
 storage is local. Do not introduce dependencies that phone home by default.
@@ -33,15 +33,32 @@ ruff check .
 ## Environment Variables
 
 ```
-ANTHROPIC_API_KEY       # required — Claude model via langchain-anthropic
+# LLM providers (set at least one + configure VALRAVN_{MODULE}_MODEL to match)
+ANTHROPIC_API_KEY       # required for anthropic: provider
+OPENAI_API_KEY          # required for openai: provider
+OPENROUTER_API_KEY      # required for openrouter: provider
+OLLAMA_BASE_URL         # optional — Ollama server URL (default: http://localhost:11434)
+
+# Per-module model selection (comma-separated for fallback chains)
+# e.g. VALRAVN_PLAN_MODEL=anthropic:claude-sonnet-4-6,anthropic:claude-haiku-4-5-20251001
+VALRAVN_PLAN_MODEL      # model for plan_investigation node
+VALRAVN_ANOMALY_MODEL   # model for check_anomalies / record_anomaly nodes
+VALRAVN_TOOL_MODEL      # model for run_forensic_tool self-correction
+VALRAVN_CONCLUSIONS_MODEL  # model for synthesize_conclusions node
+VALRAVN_REPORT_MODEL    # model for write_findings_report node
+VALRAVN_REFLECTOR_MODEL # model for RCL reflector
+VALRAVN_MUTATOR_MODEL   # model for RCL mutator
+
+# Optional overrides
 VALRAVN_MAX_RETRIES     # optional override for retry.max_attempts (default: 3)
+MLFLOW_TRACKING_URI     # optional — MLflow server URI (default: local ./mlruns)
 ```
 
 No `LANGCHAIN_API_KEY` or `LANGCHAIN_TRACING_V2` — LangSmith is not used.
 
 ## Code Style
 
-Python 3.12: Follow standard conventions. Pydantic v2 for all data models. LangGraph
+Python 3.12+: Follow standard conventions. Pydantic v2 for all data models. LangGraph
 nodes are plain functions accepting `AgentState` and returning partial state dicts.
 
 ## Recent Changes

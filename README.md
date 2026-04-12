@@ -247,7 +247,6 @@ src/valravn/
     mutator.py          # Playbook mutation with validation (BUG-003)
     feasibility.py      # Feasibility rules registry (Q2) + FeasibilityMemory
     rcl_loop.py         # Main RCL training orchestration
-    feasibility.py      # Custom feasibility rules for replay buffer filtering
   evaluation/
     evaluators.py       # MLflow-backed SC evaluators
     datasets.py         # Golden test case management
