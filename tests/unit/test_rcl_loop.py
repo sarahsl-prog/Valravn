@@ -91,6 +91,7 @@ def test_rcl_loop_records_consecutive_failures_correctly(tmp_path: Path) -> None
     Flow: add_failure (fails=1) -> record_outcome (fails=2, passes reset to 0)
     """
     from unittest.mock import patch
+
     from valravn.training.replay_buffer import ReplayBuffer
     
     # Use n_reject=4 to allow testing multiple failures without immediate rejection
@@ -100,7 +101,7 @@ def test_rcl_loop_records_consecutive_failures_correctly(tmp_path: Path) -> None
     with patch("valravn.training.rcl_loop.reflect_on_trajectory") as mock_reflect:
         mock_reflect.return_value = None  # No reflection when traces not both provided
         
-        # First failure: add_failure creates entry with fails=1, then record_outcome resets passes=0, fails=2
+        # First failure: add_failure (fails=1) then record_outcome resets passes=0, fails=2
         trainer.process_investigation_result(
             case_id="case-flaky",
             success_trace="",  # Empty traces = no reflection, straight to replay buffer
@@ -123,7 +124,7 @@ def test_rcl_loop_records_consecutive_failures_correctly(tmp_path: Path) -> None
     assert trainer.replay_buffer.buffer["case-flaky"]["fails"] == 3
     assert trainer.replay_buffer.buffer["case-flaky"]["passes"] == 0
     
-    # Third failure: record_outcome increments fails to 4, which is >= n_reject=4, so case is removed
+    # Third failure: record_outcome increments fails to 4 (>= n_reject=4), so case is removed
     with patch("valravn.training.rcl_loop.reflect_on_trajectory") as mock_reflect:
         mock_reflect.return_value = None
         trainer.process_investigation_result(
