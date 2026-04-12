@@ -205,8 +205,8 @@ def test_record_anomaly_unknown_category_falls_back_to_strings(read_only_evidenc
     assert "20" in follow_up.tool_cmd
 
 
-def test_record_anomaly_orphaned_relationship_uses_vol3(read_only_evidence, output_dir):
-    """orphaned_relationship category must produce a vol3 memory-analysis follow-up."""
+def test_record_anomaly_orphaned_relationship_uses_volatility3(read_only_evidence, output_dir):
+    """orphaned_relationship category must produce a python3 vol.py memory-analysis follow-up."""
     detected_data = {
         "anomaly_detected": True,
         "description": "Process with no valid parent",
@@ -222,4 +222,5 @@ def test_record_anomaly_orphaned_relationship_uses_vol3(read_only_evidence, outp
     assert len(result["_follow_up_steps"]) > 0
     follow_up: PlannedStep = result["_follow_up_steps"][0]
     assert follow_up.skill_domain == "memory-analysis"
-    assert follow_up.tool_cmd[0] == "vol3"
+    assert follow_up.tool_cmd[0] == "python3"
+    assert any("vol.py" in part for part in follow_up.tool_cmd)

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from valravn.training.playbook import SecurityPlaybook, ProtectedEntryError
 from valravn.training.mutator import InvalidMutationError, apply_mutation
+from valravn.training.playbook import ProtectedEntryError, SecurityPlaybook
 
 
 class TestProtectedEntries:
@@ -81,14 +81,17 @@ class TestMutatorProtectedHandling:
         
         # Mock LLM to return DELETE on protected entry
         with patch("valravn.training.mutator._get_mutator_llm") as mock_get_llm:
+            from langchain_core.messages import AIMessage
+
             from valravn.training.mutator import MutationSpec
             mock_llm = MagicMock()
-            mock_llm.invoke.return_value = MutationSpec(
+            spec = MutationSpec(
                 operation="DELETE",
                 entry_id="core-rule",
                 rule="",
                 rationale="Try to delete",
             )
+            mock_llm.invoke.return_value = AIMessage(content=spec.model_dump_json())
             mock_get_llm.return_value = mock_llm
             
             with pytest.raises(InvalidMutationError) as exc_info:
