@@ -43,11 +43,24 @@ class _AnomalyCheckResult(BaseModel):
 _FOLLOW_UP_COMMANDS: dict[str, dict] = {
     "timestamp_contradiction": {
         "skill_domain": "plaso-timeline",
-        "tool_cmd_template": ["log2timeline.py", "--parsers", "mft,usnjrnl", "{evidence}"],
+        "tool_cmd_template": [
+            "log2timeline.py",
+            "--storage-file",
+            "{output_dir}/analysis/followup_timeline.plaso",
+            "--parsers",
+            "mft,usnjrnl",
+            "{evidence}",
+        ],
     },
     "orphaned_relationship": {
         "skill_domain": "memory-analysis",
-        "tool_cmd_template": ["vol3", "-f", "{evidence}", "pstree"],
+        "tool_cmd_template": [
+            "python3",
+            "/opt/volatility3-2.20.0/vol.py",
+            "-f",
+            "{evidence}",
+            "windows.pstree.PsTree",
+        ],
     },
     "cross_tool_conflict": {
         "skill_domain": "sleuthkit",
@@ -172,7 +185,9 @@ def record_anomaly(state: dict) -> dict:
                 cmd_spec = _FOLLOW_UP_COMMANDS[category]
                 skill_domain = cmd_spec["skill_domain"]
                 tool_cmd = [
-                    evidence_path if part == "{evidence}" else part
+                    part.replace("{evidence}", evidence_path).replace(
+                        "{output_dir}", str(output_dir)
+                    )
                     for part in cmd_spec["tool_cmd_template"]
                 ]
             else:

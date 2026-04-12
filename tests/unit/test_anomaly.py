@@ -282,6 +282,46 @@ def test_record_anomaly_generates_follow_up_with_strings_cmd(read_only_evidence,
     assert "20" in " ".join(follow_up.tool_cmd)
 
 
+def test_record_anomaly_follow_up_log2timeline_has_storage_file(read_only_evidence, output_dir):
+    """A-03: log2timeline.py follow-up must include --storage-file before the evidence path."""
+    detected_data = {
+        "anomaly_detected": True,
+        "description": "Timestamp contradiction in MFT",
+        "forensic_significance": "Possible timestomping",
+        "category": "timestamp_contradiction",
+        "response_action": "added_follow_up_steps",
+    }
+    state = _base_state(read_only_evidence, output_dir, detected_anomaly_data=detected_data)
+
+    result = record_anomaly(state)
+
+    cmd = result["_follow_up_steps"][0].tool_cmd
+    assert "--storage-file" in cmd, "log2timeline.py follow-up missing --storage-file"
+    storage_idx = cmd.index("--storage-file")
+    assert cmd[storage_idx + 1].endswith(".plaso"), "Storage file must end in .plaso"
+
+
+def test_record_anomaly_follow_up_volatility_uses_correct_executable(
+    read_only_evidence, output_dir
+):
+    """A-03: orphaned_relationship follow-up must use python3 vol.py, not 'vol3'."""
+    detected_data = {
+        "anomaly_detected": True,
+        "description": "Orphaned process tree",
+        "forensic_significance": "Possible rootkit",
+        "category": "orphaned_relationship",
+        "response_action": "added_follow_up_steps",
+    }
+    state = _base_state(read_only_evidence, output_dir, detected_anomaly_data=detected_data)
+
+    result = record_anomaly(state)
+
+    cmd = result["_follow_up_steps"][0].tool_cmd
+    assert cmd[0] == "python3", f"Expected python3 as executable, got {cmd[0]!r}"
+    assert any("vol.py" in part for part in cmd), "vol.py not found in command"
+    assert "vol3" not in cmd, "'vol3' is not a valid SIFT executable"
+
+
 def test_record_anomaly_sets_investigation_halted_flag(read_only_evidence, output_dir):
     """A-02: record_anomaly must set _investigation_halted=True for INVESTIGATION_HALT action."""
     detected_data = {
