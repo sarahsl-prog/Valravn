@@ -189,6 +189,91 @@ def test_synthesize_conclusions_truncates_long_stdout(read_only_evidence, tmp_pa
     assert human_content.count("A") <= 10_000
 
 
+def test_synthesize_conclusions_truncation_is_exactly_10000_chars(
+    read_only_evidence, tmp_path
+):
+    """stdout is truncated to exactly MAX_STDOUT_CHARS (10,000) — not more, not less."""
+    stdout_file = tmp_path / "big.txt"
+    stdout_file.write_text("B" * 20_000)
+
+    inv = _make_invocation(stdout_file)
+    task = InvestigationTask(
+        prompt="check big output", evidence_refs=[str(read_only_evidence)]
+    )
+
+    state = {
+        "invocations": [inv],
+        "task": task,
+        "anomalies": [],
+    }
+
+    mock_response = _make_llm_response([])
+    captured_messages = []
+
+    def capture_invoke(messages):
+        captured_messages.extend(messages)
+        return mock_response
+
+    with patch("valravn.nodes.conclusions._get_conclusions_llm") as mock_llm_fn:
+        mock_llm = MagicMock()
+        mock_llm.invoke.side_effect = capture_invoke
+        mock_llm_fn.return_value = mock_llm
+
+        synthesize_conclusions(state)
+
+    human_content = captured_messages[1].content
+    # Should contain exactly MAX_STDOUT_CHARS B's (not more, not less)
+    assert human_content.count("B") == 10_000
+
+
+def test_synthesize_conclusions_includes_failed_invocations(read_only_evidence, tmp_path):
+    """Invocations with exit_code != 0 are still included in the LLM prompt."""
+    stdout_file = tmp_path / "out.txt"
+    stdout_file.write_text("error output")
+
+    now = datetime.now(timezone.utc)
+    failed_inv = ToolInvocationRecord(
+        step_id="step-fail",
+        attempt_number=1,
+        cmd=["fls", "-r", "/evidence.raw"],
+        exit_code=1,
+        stdout_path=stdout_file,
+        stderr_path=stdout_file,
+        started_at_utc=now,
+        completed_at_utc=now,
+        duration_seconds=0.1,
+        had_output=True,
+    )
+
+    task = InvestigationTask(
+        prompt="test failed invocation", evidence_refs=[str(read_only_evidence)]
+    )
+
+    state = {
+        "invocations": [failed_inv],
+        "task": task,
+        "anomalies": [],
+    }
+
+    mock_response = _make_llm_response([])
+    captured_messages = []
+
+    def capture_invoke(messages):
+        captured_messages.extend(messages)
+        return mock_response
+
+    with patch("valravn.nodes.conclusions._get_conclusions_llm") as mock_llm_fn:
+        mock_llm = MagicMock()
+        mock_llm.invoke.side_effect = capture_invoke
+        mock_llm_fn.return_value = mock_llm
+
+        synthesize_conclusions(state)
+
+    human_content = captured_messages[1].content
+    # Failed invocation (exit_code=1) must appear in the prompt
+    assert "Exit code: 1" in human_content
+
+
 def test_synthesize_conclusions_handles_missing_stdout(read_only_evidence, tmp_path):
     """Node handles missing stdout files gracefully (no exception)."""
     missing_path = tmp_path / "nonexistent.txt"
