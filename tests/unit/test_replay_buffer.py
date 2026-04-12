@@ -156,3 +156,23 @@ def test_replay_buffer_appends_to_existing_archive(tmp_path):
     
     # archived_count incremented
     assert buf.archived_count == 2
+
+
+def test_archived_count_survives_save_load(tmp_path):
+    """A-05: archived_count must be persisted in save() and restored by load()."""
+    archive_path = tmp_path / "archive.jsonl"
+    buf = ReplayBuffer(n_pass=3, n_reject=2, archive_path=archive_path)
+
+    buf.add_failure("case-a", {"input": "a"})
+    buf.record_outcome("case-a", success=False)  # archived_count becomes 1
+
+    buf.add_failure("case-b", {"input": "b"})
+    buf.record_outcome("case-b", success=False)  # archived_count becomes 2
+
+    assert buf.archived_count == 2
+
+    state_path = tmp_path / "replay_state.json"
+    buf.save(state_path)
+
+    loaded = ReplayBuffer.load(state_path)
+    assert loaded.archived_count == 2, "archived_count was not persisted across save/load"

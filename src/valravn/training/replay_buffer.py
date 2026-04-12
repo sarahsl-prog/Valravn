@@ -27,7 +27,8 @@ class ReplayBuffer:
         Args:
             n_pass: Number of consecutive passes to graduate a case
             n_reject: Number of consecutive fails to reject a case
-            archive_path: Path to append rejected cases (defaults to state_dir/abandoned_cases.jsonl)
+            archive_path: Path to append rejected cases (defaults to
+                state_dir/abandoned_cases.jsonl)
         """
         self.buffer: dict[str, dict] = {}  # {case_id: {case, passes, fails}}
         self.n_pass = n_pass
@@ -109,6 +110,7 @@ class ReplayBuffer:
             "n_reject": self.n_reject,
             "buffer": self.buffer,
             "archive_path": str(self.archive_path) if self.archive_path else None,
+            "archived_count": self.archived_count,
         }
         path.write_text(json.dumps(payload), encoding="utf-8")
 
@@ -124,4 +126,5 @@ class ReplayBuffer:
             archive_path=Path(archive_path) if archive_path else None,
         )
         instance.buffer = payload["buffer"]
+        instance.archived_count = payload.get("archived_count", 0)
         return instance
