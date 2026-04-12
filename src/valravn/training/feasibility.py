@@ -85,7 +85,7 @@ class FeasibilityMemory:
             return True, ""
         destructive = {"rm", "del", "remove", "delete", "destroy", "overwrite", "dd"}
         if cmd[0] in destructive or any(p in destructive for p in cmd):
-            return False, f"Command includes destructive operation"
+            return False, "Command includes destructive operation"
         return True, ""
     
     # Commands that can write to or destroy a path when it is their target.
@@ -111,10 +111,23 @@ class FeasibilityMemory:
             return True, ""
         evidence_list = evidence_refs.split(",") if isinstance(evidence_refs, str) else []
         for arg in cmd:
+            try:
+                arg_path = Path(arg)
+            except Exception:
+                continue
             for ev_path in evidence_list:
                 ev_path = ev_path.strip()
-                if ev_path and arg.startswith(ev_path):
-                    return False, f"Destructive command '{executable}' targets evidence path {ev_path}"
+                if not ev_path:
+                    continue
+                try:
+                    ev = Path(ev_path)
+                    if arg_path == ev or arg_path.is_relative_to(ev):
+                        return (
+                            False,
+                            f"Destructive command '{executable}' targets evidence path {ev_path}",
+                        )
+                except Exception:
+                    continue
         return True, ""
     
     def _check_valid_command(self, cmd: list[str], evidence_refs: str) -> tuple[bool, str]:
@@ -125,7 +138,9 @@ class FeasibilityMemory:
             return False, "Command arguments must be strings"
         return True, ""
     
-    def check(self, cmd: list[str], evidence_refs: list[str], output_dir: str) -> tuple[bool, list[str]]:
+    def check(
+        self, cmd: list[str], evidence_refs: list[str], output_dir: str
+    ) -> tuple[bool, list[str]]:
         """Validate command against all feasibility rules.
         
         Args:

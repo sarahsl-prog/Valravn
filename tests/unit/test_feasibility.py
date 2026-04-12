@@ -187,3 +187,55 @@ class TestFeasibilityErrorHandling:
         is_feasible, reason = check_feasibility({"case_id": "test"})
         assert is_feasible is False
         assert "reject_all" in reason
+
+
+class TestFeasibilityMemoryPathMatching:
+    """A-06: FeasibilityMemory must use Path.is_relative_to() for evidence path checks."""
+
+    def test_evidence_path_prefix_false_positive(self):
+        """A-06: /mnt/evidence2 must NOT match /mnt/evidence evidence path."""
+        from valravn.training.feasibility import FeasibilityMemory
+
+        fm = FeasibilityMemory()
+        # /mnt/evidence2 should NOT be blocked when evidence is /mnt/evidence
+        passed, _ = fm._check_evidence_protection(
+            cmd=["rm", "-rf", "/mnt/evidence2"],
+            evidence_refs="/mnt/evidence",
+        )
+        assert passed is True, "/mnt/evidence2 must not match /mnt/evidence"
+
+    def test_exact_evidence_path_is_blocked(self):
+        """A-06: Exact evidence path must still be blocked for destructive commands."""
+        from valravn.training.feasibility import FeasibilityMemory
+
+        fm = FeasibilityMemory()
+        passed, msg = fm._check_evidence_protection(
+            cmd=["rm", "-rf", "/mnt/evidence"],
+            evidence_refs="/mnt/evidence",
+        )
+        assert passed is False
+        assert "/mnt/evidence" in msg
+
+    def test_subdirectory_of_evidence_is_blocked(self):
+        """A-06: A path under the evidence directory must be blocked."""
+        from valravn.training.feasibility import FeasibilityMemory
+
+        fm = FeasibilityMemory()
+        passed, msg = fm._check_evidence_protection(
+            cmd=["rm", "-rf", "/mnt/evidence/subdir"],
+            evidence_refs="/mnt/evidence",
+        )
+        assert passed is False
+        assert "/mnt/evidence" in msg
+
+    def test_evidence_path_without_trailing_slash(self):
+        """A-06: Evidence path without trailing slash must not match path-prefixed names."""
+        from valravn.training.feasibility import FeasibilityMemory
+
+        fm = FeasibilityMemory()
+        # /mnt/evidenceXYZ should NOT match evidence path /mnt/evidence
+        passed, _ = fm._check_evidence_protection(
+            cmd=["rm", "-rf", "/mnt/evidenceXYZ"],
+            evidence_refs="/mnt/evidence",
+        )
+        assert passed is True, "/mnt/evidenceXYZ must not match /mnt/evidence"
